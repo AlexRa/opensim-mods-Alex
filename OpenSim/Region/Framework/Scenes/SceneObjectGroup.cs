@@ -3569,9 +3569,13 @@ namespace OpenSim.Region.Framework.Scenes
 
         public void TriggerScriptChangedEvent(Changed val)
         {
-            foreach (SceneObjectPart part in Children.Values)
+            UUID[] keys = new UUID[Children.Count];
+            Children.Keys.CopyTo(keys, 0);
+            foreach (UUID id in keys)
             {
-                part.TriggerScriptChangedEvent(val);
+                SceneObjectPart part; 
+                if( Children.TryGetValue(id, out part) )
+                    part.TriggerScriptChangedEvent(val);
             }
         }
         
