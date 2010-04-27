@@ -70,8 +70,8 @@ namespace OpenSim.Data.MySQL.Tests
             {
                 db.Dispose();
             }
-            ExecuteSql("drop table migrations");
-            ExecuteSql("drop table assets");
+ //           ExecuteSql("drop table migrations");
+ //           ExecuteSql("drop table assets");
         }
 
         /// <summary>
