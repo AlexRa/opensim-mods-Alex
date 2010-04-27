@@ -37,6 +37,11 @@ namespace OpenSim.Data.Tests
 {
     public class BasicAssetTest
     {
+
+        private const int NUM_ASSETS = 1000;
+        private const int NUM_READS = 30000;
+        private const int NUM_UPDATES = 1000;
+
         public IAssetDataPlugin db;
         public UUID uuid1;
         public UUID uuid2;
@@ -85,7 +90,6 @@ namespace OpenSim.Data.Tests
             scrambler.Scramble(a2);
             scrambler.Scramble(a3);
 
-
             db.StoreAsset(a1);
             db.StoreAsset(a2);
             db.StoreAsset(a3);
@@ -128,6 +132,177 @@ namespace OpenSim.Data.Tests
             Assert.That(metadata.Type, Is.EqualTo(a1b.Type));
             Assert.That(metadata.Temporary, Is.EqualTo(a1b.Temporary));
             Assert.That(metadata.FullID, Is.EqualTo(a1b.FullID));
+        }
+
+        [Test]
+        public void T020_Store1000Assets()
+        {
+
+            AssetBase[] assets = new AssetBase[NUM_ASSETS];
+            
+            // Get a large number of randomized assets:
+            for (int i = 0; i < assets.Length; i++)
+            {
+                UUID uid = UUID.Random();
+                AssetBase a = new AssetBase(uid, "asset one", (sbyte)AssetType.Texture, UUID.Zero.ToString());
+                a.Data = asset1;
+                scrambler.Scramble(a);
+                assets[i] = a;
+            }
+
+            int start_time = Environment.TickCount;
+            for (int i = 0; i < assets.Length; i++)
+                db.StoreAsset(assets[i]);
+            int end_time = Environment.TickCount;
+
+            Console.WriteLine("Writing {0} assets takes {1} ms", assets.Length, end_time - start_time);
+        }
+
+        [Test]
+        public void T030_RandomFetchTest()
+        {
+            Random rnd = new Random();
+            int nFailed = 0;
+            AssetBase a;
+
+            List<AssetMetadata> list = db.FetchAssetMetadataSet(0, NUM_ASSETS);
+            int nMax = list.Count;
+            Console.WriteLine("Fetched metadata of {0} assets", nMax);
+
+            Console.WriteLine("Starting random access test ({0} iterations)...", NUM_READS);
+            int start_time = Environment.TickCount;
+            for (int i = 0; i < NUM_READS; i++)
+            {
+                int n = rnd.Next(nMax);
+                try
+                {
+                    a = db.GetAsset(list[n].FullID);
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("Error after getting {0} assets: {1}", i, e.Message);
+                    throw e;
+                }
+
+                if (a == null)
+                {
+                    Console.WriteLine("Couldn't fetch #{0}, ndx={1}: {2}", i, n, list[n].FullID);
+                    nFailed++;
+                }
+            }
+            int end_time = Environment.TickCount;
+
+            Console.WriteLine("Randomly accessing assets {0} times took {1} ms", NUM_READS, end_time - start_time);
+            
+            Assert.That(nFailed == 0, String.Format("{0} assets of {1} couldn't be fetched", nFailed, nMax));
+        }
+
+        [Test]
+        public void T040_RandomUpdateTest()
+        {
+            Random rnd = new Random();
+
+            List<AssetMetadata> list = db.FetchAssetMetadataSet(0, NUM_ASSETS);
+            int nMax = list.Count;
+            Console.WriteLine("Fetched metadata of {0} assets", nMax);
+
+            Console.WriteLine("Starting random update test ({0} iterations)...", NUM_UPDATES);
+            int start_time = Environment.TickCount;
+
+            for (int i = 0; i < NUM_UPDATES; i++)
+            {
+                int n = rnd.Next(nMax);
+                AssetMetadata m = list[n];
+                AssetBase a = new AssetBase(m.ID, m.Name, (sbyte)AssetType.Texture, UUID.Zero.ToString());
+                a.Data = asset1;
+                scrambler.Scramble(a);
+                try
+                {
+                    db.StoreAsset(a);
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("Error after updating {0} assets: {1}", i, e.Message);
+                    throw e;
+                }
+
+            }
+            int end_time = Environment.TickCount;
+
+            Console.WriteLine("Randomly updating assets {0} times took {1} ms", NUM_UPDATES, end_time - start_time);
+        }
+
+        [Test]
+        public void T050_RandomChecksMissing()
+        {
+            Random rnd = new Random();
+            int nFailed = 0;
+
+            Console.WriteLine("Starting random existance check (not in DB) ({0} iterations)...", NUM_READS);
+            int start_time = Environment.TickCount;
+            for (int i = 0; i < NUM_READS; i++)
+            {
+                bool bFound;
+                UUID uid = UUID.Random();
+                try
+                {
+                    bFound = db.ExistsAsset(uid);
+                    if (bFound)
+                    {
+                        Console.WriteLine("Random UID {0} found in the asset table?", uid.ToString());
+                        nFailed++;
+                    }
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("Error after checking {0} missing assets: {1}", i, e.Message);
+                    throw e;
+                }
+
+            }
+            int end_time = Environment.TickCount;
+
+            Console.WriteLine("Randomly checking non-existing assets {0} times took {1} ms", NUM_READS, end_time - start_time);
+
+            Assert.That(nFailed == 0, "{0} random assets found in table (although they shouldn't be there)", nFailed);
+        }
+
+        [Test]
+        public void T050_RandomChecksMissingTest()
+        {
+            Random rnd = new Random();
+            int nFailed = 0;
+
+            List<AssetMetadata> list = db.FetchAssetMetadataSet(0, NUM_ASSETS);
+            int nMax = list.Count;
+            Console.WriteLine("Fetched metadata of {0} assets", nMax);
+
+            Console.WriteLine("Starting random access test ({0} iterations)...", NUM_READS);
+            int start_time = Environment.TickCount;
+            for (int i = 0; i < NUM_READS; i++)
+            {
+                int n = rnd.Next(nMax);
+                UUID uid = list[n].FullID;
+                try
+                {
+                    if ( !db.ExistsAsset(uid) )
+                    {
+                        Console.WriteLine("UID {0} not found in the asset table", uid.ToString());
+                        nFailed++;
+                    }
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("Error after checking {0} assets: {1}", i, e.Message);
+                    throw e;
+                }
+
+            }
+            int end_time = Environment.TickCount;
+
+            Console.WriteLine("Randomly checking existing assets {0} times took {1} ms", NUM_READS, end_time - start_time);
+
+            Assert.That(nFailed == 0, String.Format("{0} assets of {1} couldn't be checked", nFailed, nMax));
         }
     }
 }
