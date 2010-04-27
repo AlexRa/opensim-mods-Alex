@@ -50,6 +50,11 @@ namespace OpenSim.Data.MySQL
     /// </summary>
     public class MySQLAssetData : AssetDataBase
     {
+        /// <summary>Whether we use REPLACE or "INSERT ... ON DUPLICATE KEY UPDATE..." statements
+        /// (for performance testing)
+        /// </summary>
+        const bool USE_REPLACE = true;
+
         /// <summary>Whether to use KeepAlive if nothing is specified in the connection string or config.
         /// Should be FALSE for compatibility, now TRUE to make testing easier.
         /// </summary>
@@ -319,8 +324,17 @@ namespace OpenSim.Data.MySQL
 
         private void StoreAsset_inner(AssetBase asset, string assetName, string assetDescr)
         {
-            string sql = "replace INTO assets(id, name, description, assetType, local, temporary, create_time, access_time, data) " +
-                    "VALUES(?id, ?name, ?description, ?assetType, ?local, ?temporary, ?create_time, ?access_time, ?data)";
+            string sql = USE_REPLACE ?
+                // delete if exists and insert
+                    "replace INTO assets(id, name, description, assetType, local, temporary, create_time, access_time, data) " +
+                    "VALUES(?id, ?name, ?description, ?assetType, ?local, ?temporary, ?create_time, ?access_time, ?data)"
+                    :
+                // or update if exists or insert otherwise
+                    "insert INTO assets(id, name, description, assetType, local, temporary, create_time, access_time, data) " +
+                    " VALUES(?id, ?name, ?description, ?assetType, ?local, ?temporary, ?create_time, ?access_time, ?data) " +
+                    " ON DUPLICATE KEY UPDATE " +
+                    " name=VALUES(name), description=VALUES(description), assetType=VALUES(assetType), local=VALUES(local), " +
+                    " temporary=VALUES(temporary), access_time=VALUES(access_time), data=VALUES(data) ";
 
             MySqlCommand cmd = GetCmd(ref m_cmd_put, sql, asset.ID);
 
