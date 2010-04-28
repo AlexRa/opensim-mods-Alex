@@ -41,7 +41,7 @@ namespace OpenSim.Data.MySQL.Tests
         private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         public string file;
 //        private string m_connectionString;
-        public string connect = "Server=localhost;Port=3306;Database=opensim-nunit;User ID=opensim-nunit;Password=opensim-nunit"; // Pooling=false;
+        public string connect = "Server=localhost;Port=3306;Database=opensim-nunit;User ID=opensim-nunit;Password=opensim-nunit;KeepAlive=true";
         
         [TestFixtureSetUp]
         public void Init()
