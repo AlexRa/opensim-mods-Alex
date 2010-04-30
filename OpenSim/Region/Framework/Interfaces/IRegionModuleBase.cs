@@ -56,7 +56,7 @@ namespace OpenSim.Region.Framework.Interfaces
         /// <summary>
         /// This is called to initialize the region module. For shared modules, this is called
         /// exactly once, after creating the single (shared) instance. For non-shared modules,
-        /// this is called once on each instance, after the instace for the region has been created.
+        /// this is called once on each instance, after the instance for the region has been created.
         /// </summary>
         /// <param name="source">
         /// A <see cref="IConfigSource"/>
