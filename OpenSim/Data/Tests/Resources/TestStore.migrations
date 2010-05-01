@@ -1,0 +1,42 @@
+﻿# testing: from the test, a) update  'migrations' to a desired version N,
+# then b) update the 'magic' column to some new value. Run update. After that,
+# the only columns containing the new 'magic' number should be V<n+1> to V<last>
+
+:VERSION 1
+
+create table if not exists version_test
+(
+	id char(36) not null primary key,
+	magic int,
+	v1 int,
+	v2 int,
+	v3 int,
+	v4 int,
+	v5 int,
+	v6 int
+);
+
+if not exists(select * from version_test) then
+  insert into version_test(id, magic) values('test', 1); 
+
+update table version_test set v1 = magic;
+
+:VERSION 2
+
+update table version_test set v2 = magic;
+
+:VERSION 3
+
+update table version_test set v3 = magic;
+
+:VERSION 4
+
+update table version_test set v4 = magic;
+
+:VERSION 5
+
+update table version_test set v5 = magic;
+
+:VERSION 6
+
+update table version_test set v6 = magic;
