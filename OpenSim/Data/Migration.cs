@@ -124,7 +124,7 @@ namespace OpenSim.Data
             int version = 0;
             version = FindVersion(_conn, _type);
 
-            SortedList<int, string> migrations = GetMigrationsAfter(version);
+            SortedList<int, string[]> migrations = GetMigrationsAfter(version);
             if (migrations.Count < 1)
                 return;
 
@@ -134,15 +134,25 @@ namespace OpenSim.Data
 
             using (DbCommand cmd = _conn.CreateCommand())
             {
-                foreach (KeyValuePair<int, string> kvp in migrations)
+                foreach (KeyValuePair<int, string[]> kvp in migrations)
                 {
                     int newversion = kvp.Key;
-                    cmd.CommandText = kvp.Value;
                     // we need to up the command timeout to infinite as we might be doing long migrations.
                     cmd.CommandTimeout = 0;
+
+                    /* [AlexRa 01-May-10]: We can't always just run any SQL in a single batch (= ExecuteNonQuery()). Things like 
+                     * stored proc definitions might have to be sent to the server each in a separate batch.
+                     * This is certainly so for MS SQL; not sure how the MySQL connector sorts out the mess
+                     * with 'delimiter @@'/'delimiter ;' around procs.  So each "script" this code executes now is not
+                     * a single string, but an array of strings, executed separately.
+                    */
                     try
                     {
-                        cmd.ExecuteNonQuery();
+                        foreach (string sql in kvp.Value)
+                        {
+                            cmd.CommandText = sql;
+                            cmd.ExecuteNonQuery();
+                        }
                     }
                     catch (Exception e)
                     {
@@ -248,33 +258,137 @@ namespace OpenSim.Data
         //     return GetMigrationsAfter(0);
         // }
 
-        private SortedList<int, string> GetMigrationsAfter(int after)
+        private delegate void FlushProc();
+
+        /// <summary>Scans for migration resources in either old-style "scattered" (one file per version)
+        /// or new-style "integrated" format (single file with ":VERSION nnn" sections). 
+        /// In the new-style migrations it also recognizes ':GO' separators for parts of the SQL script
+        /// that must be sent to the server separately.  The old-style migrations are loaded each in one piece
+        /// and don't support the ':GO' feature.
+        /// </summary>
+        /// <param name="after">The version we are currently at. Scan for any higher versions</param>
+        /// <returns>A list of string arrays, representing the scripts.</returns>
+        private SortedList<int, string[]> GetMigrationsAfter(int after)
         {
             string[] names = _assem.GetManifestResourceNames();
-            SortedList<int, string> migrations = new SortedList<int, string>();
+            SortedList<int, string[]> migrations = new SortedList<int, string[]>();
             // because life is funny if we don't
             Array.Sort(names);
 
+            int nLastVerFound = 0;
+            string sPrefix = _type + ".migrations";    // is there a single "new style" migration file?
+            string sFile = Array.FindLast(names, nm => nm.StartsWith(sPrefix, StringComparison.InvariantCultureIgnoreCase));
+
+            if( !String.IsNullOrEmpty(sFile) )
+            {
+                /* The filename should be '<StoreName>.migrations[.NNN]' where NNN
+                 * is the last version number defined in the file. If the '.NNN' part is recognized, the code can skip
+                 * the file without looking inside if we have a higher version already. Without the suffix we read 
+                 * the file anyway and use the version numbers inside.  An unrecognized suffix (such as '.sql')
+                 * is accepted as not having any special meaning.
+                 * 
+                 *  NOTE that we expect only one 'merged' migration file. If there are several, we take the last one. 
+                 *  If you are numbering them, leave only the latest one in the project or at least make sure they numbered 
+                 *  to come up in the correct order (e.g. 'SomeStore.migrations.001' rather than 'SomeStore.migrations.1')
+                 */
+
+                int l = sPrefix.Length;
+                if( (sFile.Length > l) && (sFile[l] == '.') && int.TryParse(sFile.Substring(l+1), out nLastVerFound) ) 
+                {
+                    if( nLastVerFound <= after )
+                        goto scan_old_style;
+                }
+
+                System.Text.StringBuilder sb = new System.Text.StringBuilder(4096);
+                int nVersion = -1;
+
+                List<string> script = new List<string>();
+
+                FlushProc flush = delegate()
+                {
+                    if (sb.Length > 0)     // last SQL stmt to script list
+                    {
+                        script.Add(sb.ToString());
+                        sb.Length = 0;
+                    }
+
+                    if ((nVersion > after) && (script.Count > 0))   // script to the versioned script list
+                    {
+                        migrations[nVersion] = script.ToArray();
+                        script.Clear();
+                    }
+                };
+
+                using (Stream resource = _assem.GetManifestResourceStream(sFile))
+                using (StreamReader resourceReader = new StreamReader(resource))
+                {
+                    int nLineNo = 0;
+                    while (!resourceReader.EndOfStream)
+                    {
+                        string sLine = resourceReader.ReadLine();
+                        nLineNo++;
+
+                        if( String.IsNullOrEmpty(sLine) || sLine.StartsWith("#") )  // ignore a comment or empty line
+                            continue;
+
+                        if (sLine.Trim().Equals(":GO", StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            if (sb.Length == 0) continue;
+                            if (nVersion > after) 
+                                script.Add(sb.ToString());
+                            sb.Length = 0;
+                            continue;
+                        }
+
+                        if (sLine.StartsWith(":VERSION ", StringComparison.InvariantCultureIgnoreCase))  // ":VERSION nnn"
+                        {
+                            flush();
+
+                            int n = sLine.IndexOf('#');     // Comment is allowed in version sections, ignored
+                            if (n >= 0)
+                                sLine = sLine.Substring(0, n);
+
+                            if (!int.TryParse(sLine.Substring(9).Trim(), out nVersion))
+                            {
+                                m_log.ErrorFormat("[MIGRATIONS]: invalid version marker at {0}: line {1}. Migration failed!", sFile, nLineNo);
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            sb.AppendLine(sLine);
+                        }
+                    }
+                    flush();
+
+                    // If there are scattered migration files as well, only look for those with higher version numbers.
+                    if (after < nVersion)
+                        after = nVersion;
+                }
+            }
+
+scan_old_style:
+            // scan "old style" migration pieces anyway, ignore any versions already filled from the single file
             foreach (string s in names)
             {
                 Match m = _match.Match(s);
                 if (m.Success)
                 {
                     int version = int.Parse(m.Groups[1].ToString());
-                    if (version > after)
+                    if ( (version > after) && !migrations.ContainsKey(version) )
                     {
                         using (Stream resource = _assem.GetManifestResourceStream(s))
                         {
                             using (StreamReader resourceReader = new StreamReader(resource))
                             {
-                                string resourceString = resourceReader.ReadToEnd();
-                                migrations.Add(version, resourceString);
+                                string sql = resourceReader.ReadToEnd();
+                                migrations.Add(version, new string[]{sql});
                             }
                         }
                     }
                 }
             }
-
+            
             if (migrations.Count < 1) {
                 m_log.InfoFormat("[MIGRATIONS]: {0} up to date, no migrations to apply", _type);
             }
