@@ -29,7 +29,6 @@ using System;
 using System.Collections.Generic;
 using log4net.Config;
 using NUnit.Framework;
-using NUnit.Framework.SyntaxHelpers;
 using OpenMetaverse;
 using OpenSim.Framework;
 using log4net;
