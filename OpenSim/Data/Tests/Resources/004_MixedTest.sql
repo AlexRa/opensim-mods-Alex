@@ -1,2 +1,2 @@
 ﻿
-update table version_test set v4 = magic;
+update version_test set v4 = 333;

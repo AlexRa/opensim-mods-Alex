@@ -1,5 +1,6 @@
-﻿
-create table if not exists version_test
+﻿drop table if exists version_test;
+
+create table version_test
 (
 	id char(36) not null primary key,
 	magic int,
@@ -11,7 +12,4 @@ create table if not exists version_test
 	v6 int
 );
 
-if not exists(select * from version_test) then
-  insert into version_test(id, magic) values('test', 1); 
-
-update table version_test set v1 = magic;
+insert into version_test values('test', 1, 1, 0, 0, 0, 0, 0); 
