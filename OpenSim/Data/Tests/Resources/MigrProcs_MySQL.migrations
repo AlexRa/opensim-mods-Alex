@@ -10,9 +10,9 @@
 
 :VERSION 1
 
-drop function if exists f0;
 drop function if exists f1;
 drop function if exists f2;
+drop function if exists f3;
 
 :VERSION 2
 
