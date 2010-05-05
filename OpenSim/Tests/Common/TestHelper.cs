@@ -27,10 +27,11 @@
 
 using System;
 using System.Diagnostics;
+using NUnit.Framework;
 
 namespace OpenSim.Tests.Common
 {
-    public delegate void TestDelegate();
+//    public delegate void TestDelegate();
 
     public class TestHelper
     {
