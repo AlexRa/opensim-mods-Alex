@@ -40,3 +40,10 @@ update assets
 
 COMMIT;
 
+
+:VERSION 5
+
+alter table [assets]
+  add CreatorID;
+  
+  

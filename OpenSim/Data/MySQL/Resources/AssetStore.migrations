@@ -67,3 +67,9 @@ COMMIT;
 
 DELETE FROM assets WHERE id = 'dc4b9f0b-d008-45c6-96a4-01dd947ac621'
 
+# -----------------
+:VERSION 7
+
+ALTER TABLE assets add CreatorID char(36) default '00000000-0000-0000-0000-000000000000';
+
+
