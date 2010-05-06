@@ -57,7 +57,7 @@ namespace OpenSim.Data.Tests
     {
         TAssetData m_db;
 
-        const bool COMPARE_CREATOR = false;
+        const bool COMPARE_CREATOR = true;
 
         public UUID uuid1 = UUID.Random();
         public UUID uuid2 = UUID.Random();
