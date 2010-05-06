@@ -124,7 +124,7 @@ namespace OpenSim.Data.MSSQL
                             new UUID((Guid)reader["id"]),
                             (string)reader["name"],
                             Convert.ToSByte(reader["assetType"]),
-                            (string)reader["creatorid"]
+                            reader["creatorid"].ToString()
                         );
                         // Region Main
                         asset.Description = (string)reader["description"];
@@ -300,7 +300,7 @@ namespace OpenSim.Data.MSSQL
             string sql = @"WITH OrderedAssets AS
                 (
                     SELECT id, name, description, assetType, temporary, creatorid,
-                    Row = ROW_NUMBER() OVER (ORDER BY id)
+                    RowNumber = ROW_NUMBER() OVER (ORDER BY id)
                     FROM assets 
                 ) 
                 SELECT * 
@@ -323,7 +323,8 @@ namespace OpenSim.Data.MSSQL
                         metadata.Description = (string)reader["description"];
                         metadata.Type = Convert.ToSByte(reader["assetType"]);
                         metadata.Temporary = Convert.ToBoolean(reader["temporary"]);
-                        metadata.CreatorID = (string)reader["creatorid"];
+                        metadata.CreatorID = reader["creatorid"].ToString();
+                        retList.Add(metadata);
                     }
                 }
             }
