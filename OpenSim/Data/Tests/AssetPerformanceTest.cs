@@ -121,13 +121,14 @@ namespace OpenSim.Data.Tests
 
         // Note: Get() and ExistsAsset() are very similar to test. A good implementation must be
         // much faster on the 'exists' check than on full read.
-        [Explicit, TestCase(1000, (int)ReadLevel.CheckOnly, true, Description = "Repeatedly check for assets (known to be there)")]
+        [Explicit]
+        [TestCase(1000, (int)ReadLevel.CheckOnly, true, Description = "Repeatedly check for assets (known to be there)")]
         //        [TestCase(1000, ReadLevel.Meta, true, Description = "Repeatedly read metadata (known to be there)")]
-        [Explicit, TestCase(1000, (int)ReadLevel.Full, true, Description = "Repeatedly read assets (known to be there)")]
+        [TestCase(1000, (int)ReadLevel.Full, true, Description = "Repeatedly read assets (known to be there)")]
 
-        [Explicit, TestCase(1000, (int)ReadLevel.Full, false, Description = "Repeatedly read assets (missing)")]
+        [TestCase(1000, (int)ReadLevel.Full, false, Description = "Repeatedly read assets (missing)")]
         //        [TestCase(1000, ReadLevel.Meta, false, Description = "Repeatedly read metadata (missing)")]
-        [Explicit, TestCase(1000, (int)ReadLevel.CheckOnly, false, Description = "Repeatedly check for assets (missing)")]
+        [TestCase(1000, (int)ReadLevel.CheckOnly, false, Description = "Repeatedly check for assets (missing)")]
 
         public void T020_RandomAccessTest(int nChecks, int lvl, bool bKnownIDs)
         {
@@ -187,8 +188,9 @@ namespace OpenSim.Data.Tests
         }
 
 
-        [Explicit, TestCase(1000, true, Description = "Updating existing assets")]
-        [Explicit, TestCase(1000, false, Description = "Updating new assets")]
+        [Explicit]
+        [TestCase(1000, true, Description = "Updating existing assets")]
+        [TestCase(1000, false, Description = "Updating new assets")]
 
         public void T030_RandomUpdateTest(int nUpdates, bool bKnownIDs)
         {
