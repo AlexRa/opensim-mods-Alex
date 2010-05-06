@@ -97,4 +97,9 @@ COMMIT
 
 DELETE FROM assets WHERE id = 'dc4b9f0b-d008-45c6-96a4-01dd947ac621';
 
+:VERSION 6
 
+alter table [assets]
+  add CreatorID uniqueidentifier
+  
+  
