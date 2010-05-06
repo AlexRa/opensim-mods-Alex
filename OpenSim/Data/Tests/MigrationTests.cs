@@ -9,69 +9,29 @@ using System.Reflection;
 
 using MySql.Data.MySqlClient;
 using OpenSim.Data.MySQL;
+using System.Data.SqlClient;
+using Mono.Data.Sqlite;
 
 namespace OpenSim.Data.Tests
 {
-    [TestFixture(typeof(MySqlConnection), typeof(MySqlMigration), "MySQL", "Server=localhost;Port=3306;Database=opensim-nunit;User ID=opensim-nunit;Password=opensim-nunit;Pooling=false;")]
+    [TestFixture(typeof(MySqlConnection), typeof(MySqlMigration), "MySQL")]
+    [TestFixture(typeof(SqlConnection), typeof(Migration), "MSSQL")]
+    [TestFixture(typeof(SqliteConnection), typeof(Migration), "SQLite")]
 
-    public class MigrationTests<TConn, TMigr> 
+    public class MigrationTests<TConn, TMigr> : BasicDataServiceTest<TConn, object> 
         where TConn: DbConnection, new()
         where TMigr : Migration, new()
     {
         public string m_DbName;
-        public string m_connStr;
 
-        public MigrationTests(string sDbName, string sConnString)
+        public MigrationTests(string sDbName, string sConnString) : base(sConnString)
         {
             m_DbName = sDbName;
-            m_connStr = sConnString;
-            OpenSim.Tests.Common.TestLogging.LogToConsole();
         }
 
-        protected virtual DbConnection Connect()
+        public MigrationTests(string sDbName)
+            : this(sDbName, null)
         {
-            DbConnection cnn = new TConn();
-            cnn.ConnectionString = m_connStr;
-            cnn.Open();
-            return cnn;
-        }
-
-        protected delegate bool ProcessRow(IDataReader reader);
-
-        protected virtual void ExecuteSql(string sql)
-        {
-            using (DbConnection dbcon = Connect())
-            {
-                using (DbCommand cmd = dbcon.CreateCommand())
-                {
-                    cmd.CommandText = sql;
-                    cmd.ExecuteNonQuery();
-                }
-            }
-
-        }
-
-        protected virtual int ExecQuery(string sql, bool bSingleRow, ProcessRow action)
-        {
-            int nRecs = 0;
-            using (DbConnection dbcon = Connect())
-            {
-                using (DbCommand cmd = dbcon.CreateCommand())
-                {
-                    cmd.CommandText = sql;
-                    CommandBehavior cb = bSingleRow ? CommandBehavior.SingleRow : CommandBehavior.Default;
-                    using (DbDataReader rdr = cmd.ExecuteReader(cb))
-                    {
-                        while (rdr.Read())
-                        {
-                            nRecs++;
-                            if (!action(rdr))
-                                break;
-                        }
-                    }
-                }
-            }
-            return nRecs;
         }
 
         protected void ResetStoreToVersion(String store, int ver)
