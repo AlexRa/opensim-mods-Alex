@@ -317,7 +317,7 @@ namespace OpenSim.Data.MySQL
                                 metadata.Description = (string)dbReader["description"];
                                 metadata.Type = (sbyte)dbReader["assetType"];
                                 metadata.Temporary = Convert.ToBoolean(dbReader["temporary"]); // Not sure if this is correct.
-                                metadata.FullID = new UUID((string)dbReader["id"]);
+                                metadata.FullID = new UUID(dbReader["id"].ToString());
 
                                 // Current SHA1s are not stored/computed.
                                 metadata.SHA1 = new byte[] { };
