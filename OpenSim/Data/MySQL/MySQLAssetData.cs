@@ -111,7 +111,7 @@ namespace OpenSim.Data.MySQL
                     dbcon.Open();
 
                     using (MySqlCommand cmd = new MySqlCommand(
-                        "SELECT name, description, assetType, local, temporary, data FROM assets WHERE id=?id",
+                        "SELECT name, description, assetType, local, temporary, data, CreatorID FROM assets WHERE id=?id",
                         dbcon))
                     {
                         cmd.Parameters.AddWithValue("?id", assetID.ToString());
@@ -133,6 +133,7 @@ namespace OpenSim.Data.MySQL
                                         asset.Local = false;
 
                                     asset.Temporary = Convert.ToBoolean(dbReader["temporary"]);
+                                    asset.Metadata.CreatorID = (string)dbReader["CreatorID"];
                                 }
                             }
                         }
@@ -161,8 +162,8 @@ namespace OpenSim.Data.MySQL
 
                     MySqlCommand cmd =
                         new MySqlCommand(
-                            "replace INTO assets(id, name, description, assetType, local, temporary, create_time, access_time, data)" +
-                            "VALUES(?id, ?name, ?description, ?assetType, ?local, ?temporary, ?create_time, ?access_time, ?data)",
+                            "replace INTO assets(id, name, description, assetType, local, temporary, create_time, access_time, data, CreatorID)" +
+                            "VALUES(?id, ?name, ?description, ?assetType, ?local, ?temporary, ?create_time, ?access_time, ?data, ?creator)",
                             dbcon);
 
                     string assetName = asset.Name;
@@ -195,6 +196,7 @@ namespace OpenSim.Data.MySQL
                             cmd.Parameters.AddWithValue("?create_time", now);
                             cmd.Parameters.AddWithValue("?access_time", now);
                             cmd.Parameters.AddWithValue("?data", asset.Data);
+                            cmd.Parameters.AddWithValue("?creator", asset.Metadata.CreatorID);
                             cmd.ExecuteNonQuery();
                             cmd.Dispose();
                         }
@@ -302,7 +304,7 @@ namespace OpenSim.Data.MySQL
                 using (MySqlConnection dbcon = new MySqlConnection(m_connectionString))
                 {
                     dbcon.Open();
-                    MySqlCommand cmd = new MySqlCommand("SELECT name,description,assetType,temporary,id FROM assets LIMIT ?start, ?count", dbcon);
+                    MySqlCommand cmd = new MySqlCommand("SELECT name,description,assetType,temporary,id,CreatorID FROM assets LIMIT ?start, ?count", dbcon);
                     cmd.Parameters.AddWithValue("?start", start);
                     cmd.Parameters.AddWithValue("?count", count);
 
@@ -318,6 +320,7 @@ namespace OpenSim.Data.MySQL
                                 metadata.Type = (sbyte)dbReader["assetType"];
                                 metadata.Temporary = Convert.ToBoolean(dbReader["temporary"]); // Not sure if this is correct.
                                 metadata.FullID = new UUID(dbReader["id"].ToString());
+                                metadata.CreatorID = dbReader["CreatorID"].ToString();
 
                                 // Current SHA1s are not stored/computed.
                                 metadata.SHA1 = new byte[] { };
