@@ -122,7 +122,7 @@ namespace OpenSim.Data.MySQL
                             {
                                 if (dbReader.Read())
                                 {
-                                    asset = new AssetBase(assetID, (string)dbReader["name"], (sbyte)dbReader["assetType"], UUID.Zero.ToString());
+                                    asset = new AssetBase(assetID, (string)dbReader["name"], (sbyte)dbReader["assetType"], dbReader["CreatorID"].ToString());
                                     asset.Data = (byte[])dbReader["data"];
                                     asset.Description = (string)dbReader["description"];
 
@@ -133,7 +133,6 @@ namespace OpenSim.Data.MySQL
                                         asset.Local = false;
 
                                     asset.Temporary = Convert.ToBoolean(dbReader["temporary"]);
-                                    asset.Metadata.CreatorID = (string)dbReader["CreatorID"];
                                 }
                             }
                         }
