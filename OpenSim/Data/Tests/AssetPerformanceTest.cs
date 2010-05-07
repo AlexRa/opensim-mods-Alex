@@ -23,15 +23,26 @@ using OpenSim.Data.SQLite;
 
 namespace OpenSim.Data.Tests
 {
-    [TestFixture(typeof(MySqlConnection), typeof(MySQLAssetData), Description = "Asset performance tests (MySQL)")]
-    [TestFixture(typeof(SqlConnection), typeof(MSSQLAssetData), Description = "Asset performance tests (MS SQL Server)")]
-    [TestFixture(typeof(SqliteConnection), typeof(SQLiteAssetData), Description = "Asset performance tests (SQLite)")]
+    [TestFixture(typeof(MySqlConnection), typeof(MySQLAssetData), true, "Server=localhost;Port=3306;Database=opensim-perf;User ID=opensim-nunit;Password=opensim-nunit;",
+        Description = "Large asset performance tests (MySQL, separate DB)")]
+    [TestFixture(typeof(MySqlConnection), typeof(MySQLAssetData), false, Description = "Asset performance tests (MySQL, small DB)")]
+    //    [TestFixture(typeof(SqlConnection), typeof(MSSQLAssetData), Description = "Asset performance tests (MS SQL Server)")]
+//    [TestFixture(typeof(SqliteConnection), typeof(SQLiteAssetData), Description = "Asset performance tests (SQLite)")]
 
     class AssetPerformanceTest<TConn, TAssetData> : BasicDataServiceTest<TConn, TAssetData>
         where TConn : DbConnection, new()
         where TAssetData : AssetDataBase, new()
     {
         TAssetData m_db;
+        bool m_bigDB = false;
+
+        public AssetPerformanceTest(bool bigDB, string conn)
+            : base(conn)
+        {
+            // If TRUE, tests will be done on a separate non-disposable database, with 100000+ records.
+            // The tests will behave differently, as the subset of known IDs will have to be stored separately!
+            m_bigDB = bigDB;
+        }
 
         public enum ReadLevel
         {
@@ -62,18 +73,26 @@ namespace OpenSim.Data.Tests
             return data;
         }
 
+        [TestCase(1000, 1000)]
         [TestCase(100000, 1000), Explicit]
+
         public void T010_StoreLotsOfAssets(int nAssetCount, int nKnownIDs)
         {
+            if (m_bigDB == (nAssetCount == nKnownIDs))
+                Assert.Ignore();
+
             // create an aux table where we store a small percentage of the created asset IDs. 
             // In the following random access tests we load and use these IDs.   
-            try
+            if (m_bigDB)
             {
-                ExecuteSql("create table some_uuids(uid char(36));");
-            }
-            catch
-            {
-                // OK to fail if the table exists, don't want DBMS-specific "CREATE IF NOT EXISTS" syntax 
+                try
+                {
+                    ExecuteSql("create table some_uuids(uid char(36));");
+                }
+                catch
+                {
+                    // OK to fail if the table exists, don't want DBMS-specific "CREATE IF NOT EXISTS" syntax 
+                }
             }
 
             UUID critter = UUID.Random();
@@ -81,6 +100,7 @@ namespace OpenSim.Data.Tests
             Random rnd = new Random();
 
             // Get a large number of randomized assets:
+            int total_start_time = Environment.TickCount;
             AssetBase asset = new AssetBase(UUID.Random(), "random asset", (sbyte)AssetType.Texture, critter.ToString());
             for (int i = 0; i < nAssetCount; i++)
             {
@@ -96,19 +116,27 @@ namespace OpenSim.Data.Tests
                 int end_time = Environment.TickCount;
                 duration += (end_time - start_time);
 
-                // add some IDs to the aux table:
-                if( rnd.Next(nAssetCount) < nKnownIDs )
-                    ExecuteSql(String.Format("insert into some_uuids values ('{0}');", asset.ID));
-
+                if (m_bigDB)
+                {
+                    // add some IDs to the aux table:
+                    if (rnd.Next(nAssetCount) < nKnownIDs)
+                        ExecuteSql(String.Format("insert into some_uuids values ('{0}');", asset.ID));
+                }
             }
 
-            Console.WriteLine("Writing {0} assets has taken {1} sec", nAssetCount, (float)duration / 1000.0);
+            Console.WriteLine("Writing {0} assets has taken {1} sec", nAssetCount, (float)(Environment.TickCount - total_start_time) / 1000.0);
         }
 
         private List<UUID> LoadKnownIDs(int nMax)
         {
             List<UUID> list = new List<UUID>();
-            ExecQuery("select uid from some_uuids", false,
+            string sql = m_bigDB ?
+                "select uid from some_uuids" :
+                "select id from assets";
+            if (nMax > 0)
+                sql = sql + " limit " + nMax.ToString(); 
+
+            ExecQuery(sql, false,
                 delegate(IDataReader reader)
                 {
                     list.Add(new UUID(reader.GetString(0)));
