@@ -78,20 +78,19 @@ namespace OpenSim.Framework
             m_metadata.CreatorID = creatorID;
         }
 
-        public AssetBase(string assetID, string name, sbyte assetType, string creatorID)
+        public AssetBase(UUID assetID, string name, sbyte assetType, UUID creatorID)
+            : this(assetID, name, assetType, creatorID.ToString())
         {
-            if (assetType == (sbyte)AssetType.Unknown)
-            {
-                System.Diagnostics.StackTrace trace = new System.Diagnostics.StackTrace(true);
-                m_log.ErrorFormat("[ASSETBASE]: Creating asset '{0}' ({1}) with an unknown asset type\n{2}",
-                    name, assetID, trace.ToString());
-            }
+        }
 
-            m_metadata = new AssetMetadata();
-            m_metadata.ID = assetID;
-            m_metadata.Name = name;
-            m_metadata.Type = assetType;
-            m_metadata.CreatorID = creatorID;
+        public AssetBase(string assetID, string name, sbyte assetType, string creatorID)
+            : this(new UUID(assetID), name, assetType, creatorID)
+        {
+        }
+
+        public AssetBase(string assetID, string name, sbyte assetType, UUID creatorID)
+            : this(assetID, name, assetType, creatorID.ToString())
+        {
         }
 
         public bool ContainsReferences
