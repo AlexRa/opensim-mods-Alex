@@ -101,15 +101,11 @@ namespace OpenSim.Services.AssetService
         public AssetMetadata GetMetadata(string id)
         {
             UUID assetID;
-
             if (!UUID.TryParse(id, out assetID))
                 return null;
 
-            AssetBase asset = m_Database.GetAsset(assetID);
-            if (asset != null)
-                return asset.Metadata;
-
-            return null;
+            AssetMetadata meta = m_Database.GetMetadata(assetID);
+            return meta;
         }
 
         public byte[] GetData(string id)
@@ -156,7 +152,12 @@ namespace OpenSim.Services.AssetService
 
         public bool Delete(string id)
         {
-            return false;
+            UUID assetID;
+
+            if (!UUID.TryParse(id, out assetID))
+                return false;
+
+            return m_Database.DeleteAsset(assetID);
         }
 
         void HandleShowDigest(string module, string[] args)
@@ -207,7 +208,9 @@ namespace OpenSim.Services.AssetService
                 return;
             }
 
-            AssetBase asset = Get(args[2]);
+            string assetID = args[2];
+
+            AssetBase asset = Get(assetID);
 
             if (asset == null || asset.Data.Length == 0)
             {
@@ -215,12 +218,10 @@ namespace OpenSim.Services.AssetService
                 return;
             }
 
-            Delete(args[2]);
-
-            //MainConsole.Instance.Output("Asset deleted");
-            // TODO: Implement this
-
-            MainConsole.Instance.Output("Asset deletion not supported by database");
+            if (Delete(assetID))
+                MainConsole.Instance.Output("Asset deleted");
+            else
+                MainConsole.Instance.Output("Asset deletion not supported by database");
         }
     }
 }
