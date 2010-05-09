@@ -157,7 +157,14 @@ namespace OpenSim.Services.AssetService
             if (!UUID.TryParse(id, out assetID))
                 return false;
 
-            return m_Database.DeleteAsset(assetID);
+            AssetMetadata meta = m_Database.GetMetadata(assetID);
+            if (meta == null)
+                return false;
+
+            if ((int)(meta.Flags & AssetFlags.Maptile) != 0)
+                return m_Database.DeleteAsset(assetID);
+
+            return false;
         }
 
         void HandleShowDigest(string module, string[] args)

@@ -72,5 +72,6 @@ namespace OpenSim.Tests.Common.Mock
         }
 
         public List<AssetMetadata> FetchAssetMetadataSet(int start, int count) { return new List<AssetMetadata>(count); }
+
     }
 }
