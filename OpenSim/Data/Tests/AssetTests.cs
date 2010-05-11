@@ -147,9 +147,10 @@ namespace OpenSim.Data.Tests
 
             // It is possible that the Asset table is filled with data, in which case we don't try to find "our"
             // assets there:
-            if (metadatas.Count < 1000)
+            if (metadatas.Count < 999)
             {
                 AssetMetadata metadata = metadatas.Find(x => x.FullID == uuid1);
+                Assert.That(metadata, Is.Not.Null, "Metadata not found!");
                 Assert.That(metadata.Name, Is.EqualTo(a1b.Name));
                 Assert.That(metadata.Description, Is.EqualTo(a1b.Description));
                 Assert.That(metadata.Type, Is.EqualTo(a1b.Type));
