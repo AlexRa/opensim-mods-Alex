@@ -1,0 +1,279 @@
+﻿# -----------------
+:VERSION 1
+
+BEGIN;
+
+CREATE TABLE `assets` (
+  `id` binary(16) NOT NULL,
+  `name` varchar(64) NOT NULL,
+  `description` varchar(64) NOT NULL,
+  `assetType` tinyint(4) NOT NULL,
+  `invType` tinyint(4) NOT NULL,
+  `local` tinyint(1) NOT NULL,
+  `temporary` tinyint(1) NOT NULL,
+  `data` longblob NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='Rev. 1';
+
+COMMIT;
+
+# -----------------
+:VERSION 2
+
+BEGIN;
+
+ALTER TABLE assets change id oldid binary(16);
+ALTER TABLE assets add id varchar(36) not null default '';
+UPDATE assets set id = concat(substr(hex(oldid),1,8),"-",substr(hex(oldid),9,4),"-",substr(hex(oldid),13,4),"-",substr(hex(oldid),17,4),"-",substr(hex(oldid),21,12));
+ALTER TABLE assets drop oldid;
+ALTER TABLE assets add constraint primary key(id);
+
+COMMIT;
+
+# -----------------
+:VERSION 3
+
+BEGIN;
+
+ALTER TABLE assets change id oldid varchar(36);
+ALTER TABLE assets add id char(36) not null default '00000000-0000-0000-0000-000000000000';
+UPDATE assets set id = oldid;
+ALTER TABLE assets drop oldid;
+ALTER TABLE assets add constraint primary key(id);
+
+COMMIT;
+
+# -----------------
+:VERSION 4
+
+BEGIN;
+
+ALTER TABLE assets drop InvType;
+
+COMMIT;
+
+# -----------------
+:VERSION 5
+
+BEGIN;
+
+ALTER TABLE assets add create_time integer default 0;
+ALTER TABLE assets add access_time integer default 0;
+
+COMMIT;
+
+# -----------------
+:VERSION 6
+
+DELETE FROM assets WHERE id = 'dc4b9f0b-d008-45c6-96a4-01dd947ac621'
+
+# -----------------
+:VERSION 7
+
+ALTER TABLE assets add CreatorID char(36) default '00000000-0000-0000-0000-000000000000';
+
+# -----------------
+:VERSION 8
+
+# The delayed access time update: on each asset fetch, a function is included into the SELECT
+# that adds the requested UUID to an intermediate table; then a separate proc call updates
+# all access times in [assets] from that table
+
+# this is a version for UUIDs kept as CHAR(36), below in VER 9 - the same for binary UUIDs.
+# we only need either one set of them, but for now keep both for testing!
+
+DROP TABLE IF EXISTS asset_fetch_log;
+CREATE TABLE  asset_fetch_log (
+  id char(36) NOT NULL PRIMARY KEY,
+  access_time int NOT NULL
+) 
+  ENGINE=MEMORY
+;
+
+:GO
+
+DROP FUNCTION IF EXISTS mark_asset_read;
+DROP PROCEDURE IF EXISTS flush_asset_log;
+
+:GO
+
+DELIMITER $$
+
+CREATE FUNCTION mark_asset_read(accessed_id char(36), last_time int, update_threshold int) RETURNS tinyint(1)
+begin
+  if (UNIX_TIMESTAMP() - last_time) > update_threshold then
+     insert delayed into asset_fetch_log values(accessed_id, UNIX_TIMESTAMP())
+      on duplicate key update access_time=UNIX_TIMESTAMP();
+     return 1;
+  else
+     return 0;
+  end if;
+end $$
+
+DELIMITER ;
+
+:GO
+
+DELIMITER $$
+
+CREATE PROCEDURE flush_asset_log()
+begin
+  START TRANSACTION;
+  update low_priority ignore assets, asset_fetch_log
+    set assets.access_time = asset_fetch_log.access_time
+    where assets.id = asset_fetch_log.id;
+  delete from asset_fetch_log;
+  COMMIT;
+end $$
+
+DELIMITER ;
+
+# ----------------- Changing to BINARY UUIDs!
+
+
+# ----------------- CHANGE VERSION TO 9 to enable this
+:VERSION 1
+
+alter table assets add( 
+	idx binary(16),
+	crex binary(16)
+);
+	
+update assets set
+	idx = Concat(UNHEX(MID(id,1,8)),UNHEX(MID(id,10,4)),UNHEX(MID(id,15,4)),UNHEX(MID(id,20,4)),UNHEX(MID(id,25,12)));
+	
+update assets set
+	CreatorID = '00000000-0000-0000-0000-000000000000'
+	where CreatorID is null or LENGTH(CreatorID) <> 36;
+	
+update assets set
+	crex = Concat(UNHEX(MID(CreatorID,1,8)),UNHEX(MID(CreatorID,10,4)),UNHEX(MID(CreatorID,15,4)),UNHEX(MID(CreatorID,20,4)),UNHEX(MID(CreatorID,25,12)));
+	
+alter table assets
+  drop primary key,
+  drop id,
+  drop CreatorID; 
+  
+alter table assets
+  change idx id binary(16) not null first,
+  add primary key(id);
+  
+alter table assets
+  change crex CreatorID binary(16);
+
+# [asset_types] is only needed for user-friendly display in the assets_view 
+  
+DROP TABLE IF EXISTS asset_types;
+create table asset_types (
+  assetType tinyint(4) not null primary key,
+  typeName varchar(30) not null,
+  descr  varchar(80)
+);
+
+# taken from OpenMetaverse.AssetType:
+insert into asset_types(typeName, assetType, descr) values
+	('Unknown', -1, ''),
+	('Texture',  0, 'Texture asset, stores in JPEG2000 J2C stream format'),
+	('Sound',  1, 'Sound asset'),
+	('CallingCard', 2, 'Calling card for another avatar'),
+    ('Landmark', 3, 'Link to a location in world'),
+    ('Clothing', 5, 'Collection of textures and parameters that can be worn by an avatar'),
+    ('Object', 6, 'Primitive that can contain textures, sounds, scripts and more'),
+    ('Notecard', 7, 'Notecard asset'),
+    ('Folder', 8, 'Holds a collection of inventory items'),
+    ('RootFolder', 9, 'Root inventory folder'),
+    ('LSLText', 10, 'Linden scripting language script'),
+    ('LSLBytecode', 11, 'LSO bytecode for a script'),
+    ('TextureTGA', 12, 'Uncompressed TGA texture'),
+    ('Bodypart', 13, 'Collection of textures and shape parameters that can be worn'),
+    ('TrashFolder', 14, 'Trash folder'),
+    ('SnapshotFolder', 15, 'Snapshot folder'),
+    ('LostAndFoundFolder', 16, 'Lost and found folder'),
+    ('SoundWAV', 17, 'Uncompressed sound'),
+    ('ImageTGA', 18, 'Uncompressed TGA non-square image, not to be used as a texture'),
+    ('ImageJPEG', 19, 'Compressed JPEG non-square image, not to be used as a texture'),
+    ('Animation', 20, 'Animation'),
+    ('Gesture', 21, 'Sequence of animations, sounds, chat, and pauses'),
+    ('Simstate', 22, 'Simstate file'),
+    ('FavoriteFolder', 23, ''),
+    ('Link', 24, ''),
+    ('LinkFolder', 25, ''),
+    ('EnsembleStart', 26, ''),
+    ('EnsembleEnd', 45, ''),
+    ('CurrentOutfitFolder', 46, ''),
+    ('OutfitFolder', 47, ''),
+    ('MyOutfitsFolder', 48, ''),
+    ('InboxFolder', 49,   '');
+  
+  
+create view assets_view
+as select
+  CONCAT(hex(mid(id,1,4)),'-',hex(mid(id,5,2)),'-',hex(mid(id,7,2)),'-',hex(mid(id,9,2)),'-',hex(mid(id,11,6))) id,
+  name,
+  description,
+  IFNULL(t.typeName, CONCAT('(', a.assetType, ')')) assetType,
+  CONCAT(hex(mid(CreatorID,1,4)),'-',hex(mid(CreatorID,5,2)),'-',hex(mid(CreatorID,7,2)),'-',hex(mid(CreatorID,9,2)),'-',hex(mid(CreatorID,11,6))) CreatorID,
+  LENGTH(`data`) datasize,
+  `local`,
+  `temporary`,
+  FROM_UNIXTIME(create_time) created,
+  FROM_UNIXTIME(access_time) accessed,
+  `data`,
+  a.assetType assetTypeID,
+  a.id rawID,
+  a.CreatorID rawCreator
+from assets a left join asset_types t on a.assetType = t.assetType;
+  
+  
+
+# ------------------- CHANGE VERSION TO 10 to enable  this
+:VERSION 1  
+
+# (Same as Ver 8, but using BINARY(16) for the UID
+
+DROP TABLE IF EXISTS asset_fetch_log;
+CREATE TABLE  asset_fetch_log (
+  id binary(16) NOT NULL PRIMARY KEY,
+  access_time int NOT NULL
+) 
+  ENGINE=MEMORY
+;
+
+:GO
+
+DROP FUNCTION IF EXISTS mark_asset_read;
+DROP PROCEDURE IF EXISTS flush_asset_log;
+
+:GO
+
+DELIMITER $$
+
+CREATE FUNCTION mark_asset_read(accessed_id binary(16), last_time int, update_threshold int) RETURNS tinyint(1)
+begin
+  if (UNIX_TIMESTAMP() - last_time) > update_threshold then
+     insert delayed into asset_fetch_log values(accessed_id, UNIX_TIMESTAMP())
+      on duplicate key update access_time=UNIX_TIMESTAMP();
+     return 1;
+  else
+     return 0;
+  end if;
+end $$
+
+DELIMITER ;
+
+:GO
+
+DELIMITER $$
+
+CREATE PROCEDURE flush_asset_log()
+begin
+  START TRANSACTION;
+  update low_priority ignore assets, asset_fetch_log
+    set assets.access_time = asset_fetch_log.access_time
+    where assets.id = asset_fetch_log.id;
+  delete from asset_fetch_log;
+  COMMIT;
+end $$
+
+DELIMITER ;
+
