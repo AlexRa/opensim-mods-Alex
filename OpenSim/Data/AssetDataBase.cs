@@ -31,24 +31,186 @@ using System.Text;
 using System.Text.RegularExpressions;
 using OpenMetaverse;
 using OpenSim.Framework;
+using System.Data;
+using System.Data.Common;
 
 namespace OpenSim.Data
 {
-    public abstract class AssetDataBase : IAssetDataPlugin
+    [Table("assets")]
+    public class AssetDataBase<TConn, TDataSpec> : BaseDataBaseEx<TConn, TDataSpec>, IAssetDataPlugin
+        where TConn : DbConnection, new()
+        where TDataSpec : DataSpecificBase, new() 
     {
-        public abstract AssetBase GetAsset(UUID uuid);
-        
-        public abstract void StoreAsset(AssetBase asset);
-        public abstract bool ExistsAsset(UUID uuid);
-        public abstract AssetMetadata GetMetadata(UUID uuid);
-        public abstract bool DeleteAsset(UUID uuid);
+        public Cmd GetAssetCmd;
+        public Cmd GetMetaCmd;
+        public Cmd CheckCmd;
+        public Cmd DeleteCmd;
 
-        public abstract List<AssetMetadata> FetchAssetMetadataSet(int start, int count);
+        protected int m_got_asset_count = 0;
+        protected int m_notfound_count = 0;
+        protected int m_update_count = 0;
 
-        public abstract string Version { get; }
-        public abstract string Name { get; }
-        public abstract void Initialise(string connect);
-        public abstract void Initialise();
-        public abstract void Dispose();
+        public AssetDataBase() : base()
+        {
+            GetAssetCmd = new Cmd(this, "SELECT name, assetType, creatorid, description, local, temporary, data FROM assets WHERE id = @id", typeof(UUID));
+            GetMetaCmd = new Cmd(this, "SELECT name, assetType, creatorid, description, local, temporary FROM assets WHERE id = @id", typeof(UUID));
+            CheckCmd = new Cmd(this, "SELECT local FROM assets WHERE id = @id", typeof(UUID));
+            DeleteCmd = new Cmd(this, "DELETE FROM assets WHERE id = @id", typeof(UUID));
+            // NOTE:  no SQL for StoreAsset() here, because the UPDATE/INSERT implementation will be different!
+        }
+
+        protected override string GetMigrationStore()
+        {
+            return "AssetStore";
+        }
+
+        public override string Name
+        {
+            get { return DBMS.DBName() + " Asset storage engine"; }
+        }
+
+        // NOT defined here (too DBMS-specific):
+        public virtual void StoreAsset(AssetBase asset)
+        {
+            throw new NotImplementedException();
+        }
+
+        public virtual List<AssetMetadata> FetchAssetMetadataSet(int start, int count)
+        {
+            throw new NotImplementedException();
+        }
+
+        public virtual AssetBase GetAsset(UUID assetID)
+        {
+            AssetBase asset = null;
+            try
+            {
+                GetAssetCmd.Query(
+                    delegate(IDataReader reader)
+                    {
+                        // columns: name, assetType, creatorid, description, local, temporary, data
+                        asset = new AssetBase(
+                            assetID,
+                            reader["name"].ToString(),
+                            Convert.ToSByte(reader["assetType"]),
+                            DBMS.DbToUuid(reader["creatorid"])
+                        );
+                        // Region Main
+                        asset.Description = reader["description"].ToString();
+                        asset.Local = DBMS.DbToBool(reader["local"]);
+                        asset.Temporary = DBMS.DbToBool(reader["temporary"]);
+                        asset.Data = (byte[])reader["data"];
+                        m_got_asset_count++;
+                        return false;
+                    },
+                    true, assetID
+                );
+            }
+            catch (Exception e)
+            {
+                m_log.Error("[ASSETS DB]: failure fetching asset " + assetID + ": " + e.Message);
+            }
+
+            if (asset == null)
+                m_notfound_count++;
+
+            return asset;
+        }
+
+        protected AssetMetadata ReadMeta(IDataReader reader, UUID assetID)
+        {
+            AssetMetadata meta = new AssetMetadata();
+            meta.FullID = assetID;
+            meta.Name = reader["name"].ToString();
+            meta.Type = Convert.ToSByte(reader["assetType"]);
+            meta.CreatorID = DBMS.DbToUuidStr(reader["creatorid"]);
+            meta.Description = reader["description"].ToString();
+            meta.Local = DBMS.DbToBool(reader["local"]);
+            meta.Temporary = DBMS.DbToBool(reader["temporary"]);
+
+            // Current SHA1s are not stored/computed.
+            meta.SHA1 = new byte[] { };
+            return meta;
+        }
+
+        protected AssetMetadata ReadMeta(IDataReader reader)
+        {
+            return ReadMeta(reader, DBMS.DbToUuid(reader["id"]));
+        }
+
+        public virtual AssetMetadata GetMetadata(UUID assetID)
+        {
+            AssetMetadata meta = null;
+            try
+            {
+                GetAssetCmd.Query(
+                    delegate(IDataReader reader)
+                    {
+                        // columns: name, assetType, creatorid, description, local, temporary
+                        meta = ReadMeta(reader, assetID);
+                        return false;
+                    },
+                    true, assetID
+                );
+            }
+            catch (Exception e)
+            {
+                m_log.Error("[ASSETS DB]: failure fetching metadata of asset " + assetID.ToString() + ": " + e.Message);
+            }
+            return meta;
+        }
+
+        public virtual bool DeleteAsset(UUID assetID)
+        {
+            try
+            {
+                DeleteCmd.Exec(assetID);
+            }
+            catch (Exception e)
+            {
+                m_log.Error("[ASSETS DB]: failure trying to delete asset " + assetID.ToString() + ": " + e.Message);
+                return false;
+            }
+            return true;
+        }
+
+        public virtual bool ExistsAsset(UUID assetID)
+        {
+            bool exists = false;
+            try
+            {
+                CheckCmd.Query(
+                    delegate(IDataReader reader)
+                    {
+                        exists = true;
+                        return false;
+                    },
+                    true, assetID
+                );
+            }
+            catch (Exception e)
+            {
+                m_log.Error("[ASSETS DB]: failure checking for asset " + assetID.ToString() + ": " + e.Message);
+                return false;
+            }
+            return exists;
+        }
+
+        protected void TrimNameAndDescr(AssetBase asset, out string assetName, out string assetDescr, int MaxLen)
+        {
+            assetName = asset.Name;
+            if (assetName.Length > MaxLen)
+            {
+                assetName = asset.Name.Substring(0, MaxLen);
+                m_log.Warn("[ASSET DB]: Name field truncated from " + asset.Name.Length + " to " + MaxLen + " characters on add");
+            }
+
+            assetDescr = asset.Description;
+            if (asset.Description.Length > MaxLen)
+            {
+                assetDescr = assetDescr.Substring(0, MaxLen);
+                m_log.Warn("[ASSET DB]: Description field truncated from " + asset.Description.Length + " to " + MaxLen + " characters on add");
+            }
+        }
     }
 }

@@ -39,27 +39,36 @@ namespace OpenSim.Data.SQLite
     /// <summary>
     /// An asset storage interface for the SQLite database system
     /// </summary>
-    public class SQLiteAssetData : AssetDataBase
+    public class SQLiteAssetData : AssetDataBase<SqliteConnection, SQLiteDataSpecific> 
     {
-//        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+        public Cmd InsertCmd;
+        public Cmd UpdateCmd;
+        public Cmd MetaListCmd;
 
-        private const string SelectAssetSQL = "select * from assets where UUID=:UUID";
-        private const string SelectAssetMetadataSQL = "select Name, Description, Type, Temporary, UUID, CreatorID from assets limit :start, :count";
-        private const string DeleteAssetSQL = "delete from assets where UUID=:UUID";
-        private const string InsertAssetSQL = "insert into assets(UUID, Name, Description, Type, Local, Temporary, CreatorID, Data) values(:UUID, :Name, :Description, :Type, :Local, :Temporary, :CreatorID, :Data)";
-        private const string UpdateAssetSQL = "update assets set Name=:Name, Description=:Description, Type=:Type, Local=:Local, Temporary=:Temporary, CreatorID=:CreatorID, Data=:Data where UUID=:UUID";
-        private const string assetSelect = "select * from assets";
-
-        private SqliteConnection m_conn;
-
-        override public void Dispose()
+        public SQLiteAssetData()
+            : base()
         {
-            if (m_conn != null)
-            {
-                m_conn.Close();
-                m_conn = null;
-            }
+            InsertCmd = new Cmd(this, "insert into assets(ID, Name, Description, Type, Local, Temporary, CreatorID, Data) values(" +
+                "@ID, @Name, @Description, @Type, @Local, @Temporary, @CreatorID, @Data)",
+                typeof(UUID), typeof(string), typeof(string), typeof(sbyte), typeof(bool), typeof(bool), typeof(UUID), typeof(byte[])
+                );
+
+            UpdateCmd = new Cmd(this, "update assets set Name=@Name, Description=@Description, Type=@Type, Local=@Local, Temporary=@Temporary, CreatorID=@CreatorID, Data=@Data where ID=@ID",
+                typeof(string), typeof(string), typeof(sbyte), typeof(bool), typeof(bool), typeof(UUID), typeof(byte[]), typeof(UUID)
+                );
+
+            MetaListCmd = new Cmd(this, "select ID, Name, Description, Type, Temporary, CreatorID from assets limit @start, @count",
+                typeof(int), typeof(int));
         }
+
+        /// <summary>
+        /// Name of this DB provider
+        /// </summary>
+        override public string Name
+        {
+            get { return "SQLite Asset storage engine"; }
+        }
+
 
         /// <summary>
         /// <list type="bullet">
@@ -71,48 +80,20 @@ namespace OpenSim.Data.SQLite
         /// <param name="dbconnect">connect string</param>
         override public void Initialise(string dbconnect)
         {
-            if (dbconnect == string.Empty)
+            if (String.IsNullOrEmpty(dbconnect))
             {
                 dbconnect = "URI=file:Asset.db,version=3";
             }
-            m_conn = new SqliteConnection(dbconnect);
-            m_conn.Open();
 
-            Assembly assem = GetType().Assembly;
-            Migration m = new Migration(m_conn, assem, "AssetStore");
-            m.Update();
-
-            return;
+            base.Initialise(dbconnect);
         }
 
         /// <summary>
-        /// Fetch Asset
+        /// Initialise the AssetData interface using default URI
         /// </summary>
-        /// <param name="uuid">UUID of ... ?</param>
-        /// <returns>Asset base</returns>
-        override public AssetBase GetAsset(UUID uuid)
+        override public void Initialise()
         {
-            lock (this)
-            {
-                using (SqliteCommand cmd = new SqliteCommand(SelectAssetSQL, m_conn))
-                {
-                    cmd.Parameters.Add(new SqliteParameter(":UUID", uuid.ToString()));
-                    using (IDataReader reader = cmd.ExecuteReader())
-                    {
-                        if (reader.Read())
-                        {
-                            AssetBase asset = buildAsset(reader);
-                            reader.Close();
-                            return asset;
-                        }
-                        else
-                        {
-                            reader.Close();
-                            return null;
-                        }
-                    }
-                }
-            }
+            Initialise(null);
         }
 
         /// <summary>
@@ -124,144 +105,20 @@ namespace OpenSim.Data.SQLite
             //m_log.Info("[ASSET DB]: Creating Asset " + asset.FullID.ToString());
             if (ExistsAsset(asset.FullID))
             {
-                //LogAssetLoad(asset);
-
-                lock (this)
-                {
-                    using (SqliteCommand cmd = new SqliteCommand(UpdateAssetSQL, m_conn))
-                    {
-                        cmd.Parameters.Add(new SqliteParameter(":UUID", asset.FullID.ToString()));
-                        cmd.Parameters.Add(new SqliteParameter(":Name", asset.Name));
-                        cmd.Parameters.Add(new SqliteParameter(":Description", asset.Description));
-                        cmd.Parameters.Add(new SqliteParameter(":Type", asset.Type));
-                        cmd.Parameters.Add(new SqliteParameter(":Local", asset.Local));
-                        cmd.Parameters.Add(new SqliteParameter(":Temporary", asset.Temporary));
-                        cmd.Parameters.Add(new SqliteParameter(":CreatorID", asset.Metadata.CreatorID));
-                        cmd.Parameters.Add(new SqliteParameter(":Data", asset.Data));
-
-                        cmd.ExecuteNonQuery();
-                    }
-                }
+                // Name, Description, Type, Local, Temporary, CreatorID, Data, ID
+                UpdateCmd.Exec(
+                    asset.Name, asset.Description, asset.Type, DBMS.BoolToDb(asset.Local), 
+                    DBMS.BoolToDb(asset.Temporary), DBMS.UuidToDb(asset.Metadata.CreatorID), asset.Data, DBMS.UuidToDb(asset.FullID)
+                );
             }
             else
             {
-                lock (this)
-                {
-                    using (SqliteCommand cmd = new SqliteCommand(InsertAssetSQL, m_conn))
-                    {
-                        cmd.Parameters.Add(new SqliteParameter(":UUID", asset.FullID.ToString()));
-                        cmd.Parameters.Add(new SqliteParameter(":Name", asset.Name));
-                        cmd.Parameters.Add(new SqliteParameter(":Description", asset.Description));
-                        cmd.Parameters.Add(new SqliteParameter(":Type", asset.Type));
-                        cmd.Parameters.Add(new SqliteParameter(":Local", asset.Local));
-                        cmd.Parameters.Add(new SqliteParameter(":Temporary", asset.Temporary));
-                        cmd.Parameters.Add(new SqliteParameter(":CreatorID", asset.Metadata.CreatorID));
-                        cmd.Parameters.Add(new SqliteParameter(":Data", asset.Data));
-
-                        cmd.ExecuteNonQuery();
-                    }
-                }
+                // ID, Name, Description, Type, Local, Temporary, CreatorID, Data
+                InsertCmd.Exec(
+                    DBMS.UuidToDb(asset.FullID), asset.Name, asset.Description, asset.Type, DBMS.BoolToDb(asset.Local),
+                    DBMS.BoolToDb(asset.Temporary), DBMS.UuidToDb(asset.Metadata.CreatorID), asset.Data
+                );
             }
-        }
-
-//        /// <summary>
-//        /// Some... logging functionnality
-//        /// </summary>
-//        /// <param name="asset"></param>
-//        private static void LogAssetLoad(AssetBase asset)
-//        {
-//            string temporary = asset.Temporary ? "Temporary" : "Stored";
-//            string local = asset.Local ? "Local" : "Remote";
-//
-//            int assetLength = (asset.Data != null) ? asset.Data.Length : 0;
-//
-//            m_log.Debug("[ASSET DB]: " +
-//                                     string.Format("Loaded {5} {4} Asset: [{0}][{3}] \"{1}\":{2} ({6} bytes)",
-//                                                   asset.FullID, asset.Name, asset.Description, asset.Type,
-//                                                   temporary, local, assetLength));
-//        }
-
-        /// <summary>
-        /// Check if an asset exist in database
-        /// </summary>
-        /// <param name="uuid">The asset UUID</param>
-        /// <returns>True if exist, or false.</returns>
-        override public bool ExistsAsset(UUID uuid)
-        {
-            lock (this) {
-                using (SqliteCommand cmd = new SqliteCommand(SelectAssetSQL, m_conn))
-                {
-                    cmd.Parameters.Add(new SqliteParameter(":UUID", uuid.ToString()));
-                    using (IDataReader reader = cmd.ExecuteReader())
-                    {
-                        if (reader.Read())
-                        {
-                            reader.Close();
-                            return true;
-                        }
-                        else
-                        {
-                            reader.Close();
-                            return false;
-                        }
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// Delete an asset from database
-        /// </summary>
-        /// <param name="uuid"></param>
-        public void DeleteAsset(UUID uuid)
-        {
-            using (SqliteCommand cmd = new SqliteCommand(DeleteAssetSQL, m_conn))
-            {
-                cmd.Parameters.Add(new SqliteParameter(":UUID", uuid.ToString()));
-
-                cmd.ExecuteNonQuery();
-            }
-        }
-
-        /// <summary>
-        ///
-        /// </summary>
-        /// <param name="row"></param>
-        /// <returns></returns>
-        private static AssetBase buildAsset(IDataReader row)
-        {
-            // TODO: this doesn't work yet because something more
-            // interesting has to be done to actually get these values
-            // back out.  Not enough time to figure it out yet.
-            AssetBase asset = new AssetBase(
-                new UUID((String)row["UUID"]),
-                (String)row["Name"],
-                Convert.ToSByte(row["Type"]),
-                (String)row["CreatorID"]
-            );
-
-            asset.Description = (String) row["Description"];
-            asset.Local = Convert.ToBoolean(row["Local"]);
-            asset.Temporary = Convert.ToBoolean(row["Temporary"]);
-            asset.Data = (byte[]) row["Data"];
-            return asset;
-        }
-
-        private static AssetMetadata buildAssetMetadata(IDataReader row)
-        {
-            AssetMetadata metadata = new AssetMetadata();
-
-            metadata.FullID = new UUID((string) row["UUID"]);
-            metadata.Name = (string) row["Name"];
-            metadata.Description = (string) row["Description"];
-            metadata.Type = Convert.ToSByte(row["Type"]);
-            metadata.Temporary = Convert.ToBoolean(row["Temporary"]); // Not sure if this is correct.
-            metadata.CreatorID = (string)row["CreatorID"];
-
-            // Current SHA1s are not stored/computed.
-            metadata.SHA1 = new byte[] {};
-
-            return metadata;
         }
 
         /// <summary>
@@ -276,71 +133,36 @@ namespace OpenSim.Data.SQLite
         {
             List<AssetMetadata> retList = new List<AssetMetadata>(count);
 
-            lock (this)
-            {
-                using (SqliteCommand cmd = new SqliteCommand(SelectAssetMetadataSQL, m_conn))
+            MetaListCmd.Query(
+                delegate(IDataReader row)
                 {
-                    cmd.Parameters.Add(new SqliteParameter(":start", start));
-                    cmd.Parameters.Add(new SqliteParameter(":count", count));
-
-                    using (IDataReader reader = cmd.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            AssetMetadata metadata = buildAssetMetadata(reader);
-                            retList.Add(metadata);
-                        }
-                    }
-                }
-            }
+                    AssetMetadata metadata = ReadMeta(row);
+                    retList.Add(metadata);
+                    return true;
+                },
+                false, start, count);
 
             return retList;
         }
 
-        /***********************************************************************
-         *
-         *  Database Binding functions
-         *
-         *  These will be db specific due to typing, and minor differences
-         *  in databases.
-         *
-         **********************************************************************/
-
-        #region IPlugin interface
-
+#if SOME_TEST_CODE_HERE
         /// <summary>
-        ///
+        /// Some... logging functionnality
         /// </summary>
-        override public string Version
+        /// <param name="asset"></param>
+        private static void LogAssetLoad(AssetBase asset)
         {
-            get
-            {
-                Module module = GetType().Module;
-                // string dllName = module.Assembly.ManifestModule.Name;
-                Version dllVersion = module.Assembly.GetName().Version;
+            string temporary = asset.Temporary ? "Temporary" : "Stored";
+            string local = asset.Local ? "Local" : "Remote";
 
-                return
-                    string.Format("{0}.{1}.{2}.{3}", dllVersion.Major, dllVersion.Minor, dllVersion.Build,
-                                  dllVersion.Revision);
-            }
+            int assetLength = (asset.Data != null) ? asset.Data.Length : 0;
+
+            m_log.Debug("[ASSET DB]: " +
+                                     string.Format("Loaded {5} {4} Asset: [{0}][{3}] \"{1}\":{2} ({6} bytes)",
+                                                   asset.FullID, asset.Name, asset.Description, asset.Type,
+                                                   temporary, local, assetLength));
         }
 
-        /// <summary>
-        /// Initialise the AssetData interface using default URI
-        /// </summary>
-        override public void Initialise()
-        {
-            Initialise("URI=file:Asset.db,version=3");
-        }
-
-        /// <summary>
-        /// Name of this DB provider
-        /// </summary>
-        override public string Name
-        {
-            get { return "SQLite Asset storage engine"; }
-        }
-
-        #endregion
+#endif
     }
 }

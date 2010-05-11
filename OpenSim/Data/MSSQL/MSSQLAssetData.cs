@@ -33,109 +33,48 @@ using System.Collections.Generic;
 using OpenMetaverse;
 using log4net;
 using OpenSim.Framework;
+using OpenSim.Data;
 
 namespace OpenSim.Data.MSSQL
 {
     /// <summary>
     /// A MSSQL Interface for the Asset server
     /// </summary>
-    public class MSSQLAssetData : AssetDataBase
+    public class MSSQLAssetData : AssetDataBase<SqlConnection, MSSQLDataSpecific>
     {
-        private const string _migrationStore = "AssetStore";
+        public Cmd StoreCmd;
+        public Cmd MetaListCmd;
 
-        private static readonly ILog m_log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
-        private long m_ticksToEpoch;
-        /// <summary>
-        /// Database manager
-        /// </summary>
-        private MSSQLManager m_database;
-        private string m_connectionString;
+        private long m_ticksToEpoch = new System.DateTime(1970, 1, 1).Ticks;
 
-        #region IPlugin Members
-
-        override public void Dispose() { }
-
-        /// <summary>
-        /// <para>Initialises asset interface</para>
-        /// </summary>
-        // [Obsolete("Cannot be default-initialized!")]
-        override public void Initialise()
+        public MSSQLAssetData() : base()
         {
-            m_log.Info("[MSSQLAssetData]: " + Name + " cannot be default-initialized!");
-            throw new PluginNotInitialisedException(Name);
-        }
+            StoreCmd = new Cmd(this, 
+                 "IF EXISTS(SELECT * FROM [assets] WHERE id = @id) " +
+                 "  UPDATE [assets] SET [name] = @name, [description] = @description, [assetType] = @assetType, " +
+                 "  [local] = @local, [temporary] = @temporary, [create_time] = @create_time, [access_time] = @access_time, " +
+                 "  [creatorid] = @creatorid, [data] = @data WHERE id = @id" + 
+                 " ELSE " + 
+                 "  INSERT INTO assets ([id], [name], [description], [assetType], [local], [temporary], [create_time], [access_time], [creatorid], [data]) " +
+                 "  VALUES (@id, @name, @description, @assetType, @local, @temporary, @create_time, @access_time, @creatorid, @data)",
+                 typeof(UUID), 
+                 typeof(string), typeof(string), typeof(sbyte), 
+                 typeof(bool), typeof(bool), typeof(int), typeof(int),
+                 typeof(UUID), typeof(byte[])
+                 );
 
-        /// <summary>
-        /// Initialises asset interface
-        /// </summary>
-        /// <para>
-        /// a string instead of file, if someone writes the support
-        /// </para>
-        /// <param name="connectionString">connect string</param>
-        override public void Initialise(string connectionString)
-        {
-            m_ticksToEpoch = new System.DateTime(1970, 1, 1).Ticks;
-
-            m_database = new MSSQLManager(connectionString);
-            m_connectionString = connectionString;
-
-            //New migration to check for DB changes
-            m_database.CheckMigration(_migrationStore);
-        }
-
-        /// <summary>
-        /// Database provider version.
-        /// </summary>
-        override public string Version
-        {
-            get { return m_database.getVersion(); }
-        }
-
-        /// <summary>
-        /// The name of this DB provider.
-        /// </summary>
-        override public string Name
-        {
-            get { return "MSSQL Asset storage engine"; }
-        }
-
-        #endregion
-
-        #region IAssetDataPlugin Members
-
-        /// <summary>
-        /// Fetch Asset from m_database
-        /// </summary>
-        /// <param name="assetID">the asset UUID</param>
-        /// <returns></returns>
-        override public AssetBase GetAsset(UUID assetID)
-        {
-            string sql = "SELECT * FROM assets WHERE id = @id";
-            using (SqlConnection conn = new SqlConnection(m_connectionString))
-            using (SqlCommand cmd = new SqlCommand(sql, conn))
-            {
-                cmd.Parameters.Add(m_database.CreateParameter("id", assetID));
-                conn.Open();
-                using (SqlDataReader reader = cmd.ExecuteReader())
-                {
-                    if (reader.Read())
-                    {
-                        AssetBase asset = new AssetBase(
-                            new UUID((Guid)reader["id"]),
-                            (string)reader["name"],
-                            Convert.ToSByte(reader["assetType"]),
-                            reader["creatorid"].ToString()
-                        );
-                        // Region Main
-                        asset.Description = (string)reader["description"];
-                        asset.Local = Convert.ToBoolean(reader["local"]);
-                        asset.Temporary = Convert.ToBoolean(reader["temporary"]);
-                        asset.Data = (byte[])reader["data"];
-                        return asset;
-                    }
-                    return null; // throw new Exception("No rows to return");
-                }
-            }
+            MetaListCmd = new Cmd(this,
+                @"WITH OrderedAssets AS
+                (
+                    SELECT [id], [name], [description], [assetType], [local], [temporary], [creatorid],
+                    [RowNumber] = ROW_NUMBER() OVER (ORDER BY [id])
+                    FROM assets 
+                ) 
+                SELECT * 
+                FROM OrderedAssets
+                WHERE RowNumber BETWEEN @start AND @stop;",
+                typeof(int), typeof(int)
+                );
         }
 
         /// <summary>
@@ -144,146 +83,21 @@ namespace OpenSim.Data.MSSQL
         /// <param name="asset">the asset</param>
         override public void StoreAsset(AssetBase asset)
         {
-            if (ExistsAsset(asset.FullID))
-                UpdateAsset(asset);
-            else
-                InsertAsset(asset);
-        }
+            int now = (int)((System.DateTime.Now.Ticks - m_ticksToEpoch) / 10000000);
 
+            string assetDescription, assetName;
+            TrimNameAndDescr(asset, out assetName, out assetDescription, 64);
 
-        private void InsertAsset(AssetBase asset)
-        {
-            if (ExistsAsset(asset.FullID))
+            try
             {
-                return;
+                // @id, @name, @descr, @assetType, @local, @temporary, @create_time, @access_time, @creatorid, @data
+                StoreCmd.Exec(asset.FullID, assetName, assetDescription, (int)asset.Type, asset.Local,
+                    asset.Temporary, now, now, asset.Metadata.CreatorID, asset.Data);
             }
-            
-            string sql = @"INSERT INTO assets
-                            ([id], [name], [description], [assetType], [local], 
-                             [temporary], [create_time], [access_time], [creatorid], [data])
-                           VALUES
-                            (@id, @name, @description, @assetType, @local, 
-                             @temporary, @create_time, @access_time, @creatorid, @data)";
-            
-            string assetName = asset.Name;
-            if (asset.Name.Length > 64)
+            catch(Exception e)
             {
-                assetName = asset.Name.Substring(0, 64);
-                m_log.Warn("[ASSET DB]: Name field truncated from " + asset.Name.Length + " to " + assetName.Length + " characters on add");
+                m_log.ErrorFormat("[ASSET DB]: Error storing item {0}: {1}", asset.ID, e.Message);
             }
-            
-            string assetDescription = asset.Description;
-            if (asset.Description.Length > 64)
-            {
-                assetDescription = asset.Description.Substring(0, 64);
-                m_log.Warn("[ASSET DB]: Description field truncated from " + asset.Description.Length + " to " + assetDescription.Length + " characters on add");
-            }
-            
-            using (SqlConnection conn = new SqlConnection(m_connectionString))
-            using (SqlCommand command = new SqlCommand(sql, conn))
-            {
-                int now = (int)((System.DateTime.Now.Ticks - m_ticksToEpoch) / 10000000);
-                command.Parameters.Add(m_database.CreateParameter("id", asset.FullID));
-                command.Parameters.Add(m_database.CreateParameter("name", assetName));
-                command.Parameters.Add(m_database.CreateParameter("description", assetDescription));
-                command.Parameters.Add(m_database.CreateParameter("assetType", asset.Type));
-                command.Parameters.Add(m_database.CreateParameter("local", asset.Local));
-                command.Parameters.Add(m_database.CreateParameter("temporary", asset.Temporary));
-                command.Parameters.Add(m_database.CreateParameter("access_time", now));
-                command.Parameters.Add(m_database.CreateParameter("create_time", now));
-                command.Parameters.Add(m_database.CreateParameter("creatorid", asset.Metadata.CreatorID));
-                command.Parameters.Add(m_database.CreateParameter("data", asset.Data));
-                conn.Open();
-                try
-                {
-                    command.ExecuteNonQuery();
-                }
-                catch(Exception e)
-                {
-                    m_log.Error("[ASSET DB]: Error inserting item :" + e.Message);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Update asset in m_database
-        /// </summary>
-        /// <param name="asset">the asset</param>
-        private void UpdateAsset(AssetBase asset)
-        {
-            string sql = @"UPDATE assets set name = @name, description = @description, assetType = @assetType,
-                            local = @local, temporary = @temporary, data = @data
-                            , creatorid = @creatorid
-                           WHERE id = @keyId;";
-
-            string assetName = asset.Name;
-            if (asset.Name.Length > 64)
-            {
-                assetName = asset.Name.Substring(0, 64);
-                m_log.Warn("[ASSET DB]: Name field truncated from " + asset.Name.Length + " to " + assetName.Length + " characters on update");
-            }
-            
-            string assetDescription = asset.Description;
-            if (asset.Description.Length > 64)
-            {
-                assetDescription = asset.Description.Substring(0, 64);
-                m_log.Warn("[ASSET DB]: Description field truncated from " + asset.Description.Length + " to " + assetDescription.Length + " characters on update");
-            }
-            
-            using (SqlConnection conn = new SqlConnection(m_connectionString))
-            using (SqlCommand command = new SqlCommand(sql, conn))
-            {
-                command.Parameters.Add(m_database.CreateParameter("keyId", asset.FullID));
-                command.Parameters.Add(m_database.CreateParameter("name", assetName));
-                command.Parameters.Add(m_database.CreateParameter("description", assetDescription));
-                command.Parameters.Add(m_database.CreateParameter("assetType", asset.Type));
-                command.Parameters.Add(m_database.CreateParameter("local", asset.Local));
-                command.Parameters.Add(m_database.CreateParameter("temporary", asset.Temporary));
-                command.Parameters.Add(m_database.CreateParameter("data", asset.Data));
-                command.Parameters.Add(m_database.CreateParameter("creatorid", asset.Metadata.CreatorID));
-                conn.Open();
-                try
-                {
-                    command.ExecuteNonQuery();
-                }
-                catch (Exception e)
-                {
-                    m_log.Error(e.ToString());
-                }
-            }
-        }
-
-// Commented out since currently unused - this probably should be called in GetAsset()
-//        private void UpdateAccessTime(AssetBase asset)
-//        {
-//            using (AutoClosingSqlCommand cmd = m_database.Query("UPDATE assets SET access_time = @access_time WHERE id=@id"))
-//            {
-//                int now = (int)((System.DateTime.Now.Ticks - m_ticksToEpoch) / 10000000);
-//                cmd.Parameters.AddWithValue("@id", asset.FullID.ToString());
-//                cmd.Parameters.AddWithValue("@access_time", now);
-//                try
-//                {
-//                    cmd.ExecuteNonQuery();
-//                }
-//                catch (Exception e)
-//                {
-//                    m_log.Error(e.ToString());
-//                }
-//            }
-//        }
-
-        /// <summary>
-        /// Check if asset exist in m_database
-        /// </summary>
-        /// <param name="uuid"></param>
-        /// <returns>true if exist.</returns>
-        override public bool ExistsAsset(UUID uuid)
-        {
-            if (GetAsset(uuid) != null)
-            {
-                return true;
-            }
-            return false;
         }
 
         /// <summary>
@@ -297,41 +111,23 @@ namespace OpenSim.Data.MSSQL
         public override List<AssetMetadata> FetchAssetMetadataSet(int start, int count)
         {
             List<AssetMetadata> retList = new List<AssetMetadata>(count);
-            string sql = @"WITH OrderedAssets AS
-                (
-                    SELECT id, name, description, assetType, temporary, creatorid,
-                    RowNumber = ROW_NUMBER() OVER (ORDER BY id)
-                    FROM assets 
-                ) 
-                SELECT * 
-                FROM OrderedAssets
-                WHERE RowNumber BETWEEN @start AND @stop;";
 
-            using (SqlConnection conn = new SqlConnection(m_connectionString))
-            using (SqlCommand cmd = new SqlCommand(sql, conn))
+            try
             {
-                cmd.Parameters.Add(m_database.CreateParameter("start", start));
-                cmd.Parameters.Add(m_database.CreateParameter("stop", start + count - 1));
-                conn.Open();
-                using (SqlDataReader reader = cmd.ExecuteReader())
-                {
-                    while (reader.Read())
+                MetaListCmd.Query(
+                    delegate(IDataReader reader)
                     {
-                        AssetMetadata metadata = new AssetMetadata();
-                        metadata.FullID = new UUID((Guid)reader["id"]);
-                        metadata.Name = (string)reader["name"];
-                        metadata.Description = (string)reader["description"];
-                        metadata.Type = Convert.ToSByte(reader["assetType"]);
-                        metadata.Temporary = Convert.ToBoolean(reader["temporary"]);
-                        metadata.CreatorID = reader["creatorid"].ToString();
+                        AssetMetadata metadata = ReadMeta(reader);
                         retList.Add(metadata);
-                    }
-                }
+                        return true;
+                    },
+                    false, start, start + count - 1);
             }
-
+            catch (Exception e)
+            {
+                m_log.ErrorFormat("[ASSET DB]: Error getting metadata list: {0}", e.Message);
+            }
             return retList;
         }
-
-        #endregion
     }
 }
