@@ -118,9 +118,13 @@ namespace OpenSim.Data
 
         public void InitMigrationsTable()
         {
-            if (FindVersion(_conn, "migrations") <= 0)
+            // NOTE: normally when the [migrations] table is created, the version record for 'migrations' is
+            // added immediately. However, if for some reason the table is there but empty, we want to handle that as well.
+            int ver = FindVersion(_conn, "migrations");
+            if (ver <= 0)   // -1 = no table, 0 = no version record
             {
-                ExecuteScript("create table migrations(name varchar(100), version int)");
+                if( ver < 0 )
+                    ExecuteScript("create table migrations(name varchar(100), version int)");
                 InsertVersion("migrations", 1);
             }
         }
@@ -247,7 +251,8 @@ namespace OpenSim.Data
                 }
                 catch
                 {
-                    // Something went wrong, so we're version 0
+                    // Something went wrong (probably no table), so we're at version -1
+                    version = -1;
                 }
             }
             return version;
@@ -321,7 +326,7 @@ namespace OpenSim.Data
                         sb.Length = 0;
                     }
 
-                    if ((nVersion > after) && (script.Count > 0))   // script to the versioned script list
+                    if ( (nVersion > 0) && (nVersion > after) && (script.Count > 0) && !migrations.ContainsKey(nVersion))   // script to the versioned script list
                     {
                         migrations[nVersion] = script.ToArray();
                     }
