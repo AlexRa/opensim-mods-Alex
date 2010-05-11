@@ -31,7 +31,7 @@ using OpenSim.Framework;
 
 namespace OpenSim.Data
 {
-    public interface IAssetDataPlugin : IPlugin
+    public interface IAssetDataPlugin : IDataPlugin
     {
         AssetBase GetAsset(UUID uuid);
         void StoreAsset(AssetBase asset);
@@ -39,7 +39,6 @@ namespace OpenSim.Data
         AssetMetadata GetMetadata(UUID uuid);
         bool DeleteAsset(UUID uuid);
         List<AssetMetadata> FetchAssetMetadataSet(int start, int count);
-        void Initialise(string connect);
     }
 
     public class AssetDataInitialiser : PluginInitialiserBase
