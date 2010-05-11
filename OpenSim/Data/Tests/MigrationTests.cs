@@ -16,7 +16,7 @@ namespace OpenSim.Data.Tests
 {
     [TestFixture(typeof(MySqlConnection), typeof(MySqlMigration), "MySQL")]
     [TestFixture(typeof(SqlConnection), typeof(Migration), "MSSQL")]
-    [TestFixture(typeof(SqliteConnection), typeof(Migration), "SQLite")]
+//    [TestFixture(typeof(SqliteConnection), typeof(Migration), "SQLite")]
 
     public class MigrationTests<TConn, TMigr> : BasicDataServiceTest<TConn, object> 
         where TConn: DbConnection, new()
@@ -36,8 +36,16 @@ namespace OpenSim.Data.Tests
 
         protected void ResetStoreToVersion(String store, int ver)
         {
-            string sql = String.Format("delete from migrations where name = '{0}'", store);
-            ExecuteSql(sql);
+            string sql;
+            try
+            {
+                sql = String.Format("delete from migrations where name = '{0}'", store);
+                ExecuteSql(sql);
+            }
+            catch (Exception e)
+            {
+                ExecuteSql("create table migrations(name varchar(100), version int);");
+            }
 
             if (ver > 0)
             {
