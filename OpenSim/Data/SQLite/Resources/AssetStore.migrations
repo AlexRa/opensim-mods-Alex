@@ -43,7 +43,31 @@ COMMIT;
 
 :VERSION 5
 
-alter table [assets]
+alter table assets
   add CreatorID;
   
+:VERSION 6
+
+# Renaming column 'UUID' to 'id', to make it consistent with column naming in other DBMS.
+# This way we can mostly use the same DBMS-independent code (in AssetDatabase.cs) for all dbs
+
+BEGIN;
+
+CREATE TABLE assets_new(
+	ID not null primary key,
+	Name,
+	Description,
+	Type,
+	Local,
+	Temporary,
+	CreatorID,
+	Data
+);
+
+INSERT INTO assets_new SELECT 
+	UUID, Name, Description, Type, Local, Temporary, CreatorID, Data FROM assets;
+DROP TABLE assets;
+ALTER TABLE assets_new RENAME TO assets;
+  
+COMMIT;
   
