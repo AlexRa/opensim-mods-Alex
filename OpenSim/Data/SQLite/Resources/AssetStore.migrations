@@ -57,7 +57,7 @@ CREATE TABLE assets_new(
 	ID not null primary key,
 	Name,
 	Description,
-	Type,
+	AssetType,
 	Local,
 	Temporary,
 	CreatorID,

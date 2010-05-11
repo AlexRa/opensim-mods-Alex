@@ -48,16 +48,16 @@ namespace OpenSim.Data.SQLite
         public SQLiteAssetData()
             : base()
         {
-            InsertCmd = new Cmd(this, "insert into assets(ID, Name, Description, Type, Local, Temporary, CreatorID, Data) values(" +
-                "@ID, @Name, @Description, @Type, @Local, @Temporary, @CreatorID, @Data)",
+            InsertCmd = new Cmd(this, "insert into assets(ID, Name, Description, AssetType, Local, Temporary, CreatorID, Data) values(" +
+                "@ID, @Name, @Description, @AssetType, @Local, @Temporary, @CreatorID, @Data)",
                 typeof(UUID), typeof(string), typeof(string), typeof(sbyte), typeof(bool), typeof(bool), typeof(UUID), typeof(byte[])
                 );
 
-            UpdateCmd = new Cmd(this, "update assets set Name=@Name, Description=@Description, Type=@Type, Local=@Local, Temporary=@Temporary, CreatorID=@CreatorID, Data=@Data where ID=@ID",
+            UpdateCmd = new Cmd(this, "update assets set Name=@Name, Description=@Description, AssetType=@AssetType, Local=@Local, Temporary=@Temporary, CreatorID=@CreatorID, Data=@Data where ID=@ID",
                 typeof(string), typeof(string), typeof(sbyte), typeof(bool), typeof(bool), typeof(UUID), typeof(byte[]), typeof(UUID)
                 );
 
-            MetaListCmd = new Cmd(this, "select ID, Name, Description, Type, Temporary, CreatorID from assets limit @start, @count",
+            MetaListCmd = new Cmd(this, "select ID, Name, Description, AssetType, Local, Temporary, CreatorID from assets limit @start, @count",
                 typeof(int), typeof(int));
         }
 
