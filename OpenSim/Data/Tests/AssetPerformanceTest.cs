@@ -1,4 +1,31 @@
-﻿using System;
+﻿/*
+ * Copyright (c) Contributors, http://opensimulator.org/
+ * See CONTRIBUTORS.TXT for a full list of copyright holders.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *     * Neither the name of the OpenSimulator Project nor the
+ *       names of its contributors may be used to endorse or promote products
+ *       derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE DEVELOPERS ``AS IS'' AND ANY
+ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY
+ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+using System;
 using System.Collections.Generic;
 using log4net.Config;
 using NUnit.Framework;
@@ -23,37 +50,59 @@ using OpenSim.Data.SQLite;
 
 namespace OpenSim.Data.Tests
 {
-    [TestFixture(typeof(MySqlConnection), typeof(MySQLAssetData), true, "Server=localhost;Port=3306;Database=opensim-perf;User ID=opensim-nunit;Password=opensim-nunit;",
-        Description = "Large asset performance tests (MySQL, separate DB)")]
-    [TestFixture(typeof(MySqlConnection), typeof(MySQLAssetData), false, Description = "Asset performance tests (MySQL, small DB)")]
-    //    [TestFixture(typeof(SqlConnection), typeof(MSSQLAssetData), Description = "Asset performance tests (MS SQL Server)")]
+
+    public enum ReadLevel
+    {
+        CheckOnly = 1,
+        Meta = 2,
+        Full = 3
+    };
+
+    [TestFixture(typeof(MySqlConnection), typeof(MySQLAssetData), true, true, "Server=localhost;Port=3306;Database=opensim-perf;User ID=opensim-nunit;Password=opensim-nunit;",
+        Description = "MySQL Large asset performance tests (separate DB)")]
+    [TestFixture(typeof(MySqlConnection), typeof(MySQLAssetData), false, true,
+        Description = "MySQL Asset performance tests (KeepAlive)")]
+    [TestFixture(typeof(MySqlConnection), typeof(MySQLAssetData), false, false,
+        Description = "MySQL Asset performance tests (Disconnect)")]
+/*
+ *  Oops!  Must be SUPER to set the cache!
+    [TestFixture(typeof(MySqlConnection), typeof(MySQLAssetData), false, true,
+        "Server=localhost;Port=3306;Database=opensim-nunit;User ID=opensim-nunit;Password=opensim-nunit;AssetKeyCache=1M;",
+        Description = "MySQL Asset performance tests (cached keys)")]
+*/
+    [TestFixture(typeof(SqlConnection), typeof(MSSQLAssetData), false, true,
+        Description = "Asset performance tests (MS SQL Server, KeepAlive)")]
+    [TestFixture(typeof(SqlConnection), typeof(MSSQLAssetData), false, false,
+        Description = "Asset performance tests (MS SQL Server, Disconnecting)")]
+
 //    [TestFixture(typeof(SqliteConnection), typeof(SQLiteAssetData), Description = "Asset performance tests (SQLite)")]
 
     class AssetPerformanceTest<TConn, TAssetData> : BasicDataServiceTest<TConn, TAssetData>
         where TConn : DbConnection, new()
-        where TAssetData : AssetDataBase, new()
+        where TAssetData : class, IAssetDataPlugin, new()
     {
         TAssetData m_db;
         bool m_bigDB = false;
+        bool m_KeepAlive = true;
 
-        public AssetPerformanceTest(bool bigDB, string conn)
+        public AssetPerformanceTest(bool bigDB, bool keepAlive, string conn)
             : base(conn)
         {
             // If TRUE, tests will be done on a separate non-disposable database, with 100000+ records.
             // The tests will behave differently, as the subset of known IDs will have to be stored separately!
             m_bigDB = bigDB;
+            m_KeepAlive = keepAlive;
         }
 
-        public enum ReadLevel
+        public AssetPerformanceTest(bool bigDB, bool keepAlive)
+            : this(bigDB, keepAlive, "")
         {
-            CheckOnly = 1,
-            Meta = 2,
-            Full = 3
-        };
+        }
 
         PropertyScrambler<AssetBase> scrambler = new PropertyScrambler<AssetBase>()
                 .DontScramble(x => x.Data)
                 .DontScramble(x => x.ID)
+                .DontScramble(x => x.Type)
                 .DontScramble(x => x.FullID)
                 .DontScramble(x => x.Metadata.ID)
                 .DontScramble(x => x.Metadata.CreatorID)
@@ -62,8 +111,12 @@ namespace OpenSim.Data.Tests
 
         protected override void InitService(object service)
         {
+            if (!String.IsNullOrEmpty(m_connStr) && !m_connStr.EndsWith(";"))
+                m_connStr += ";";
+
+            string cs = m_connStr + String.Format("KeepAlive={0}", m_KeepAlive ? 1 : 0);
             m_db = (TAssetData)service;
-            m_db.Initialise(m_connStr);
+            m_db.Initialise(cs);
         }
 
         private byte[] MakeRandomBlob(Random rnd)
@@ -74,6 +127,7 @@ namespace OpenSim.Data.Tests
         }
 
         [TestCase(1000, 1000)]
+        [TestCase(10000, 10000)]
         [TestCase(100000, 1000), Explicit]
 
         public void T010_StoreLotsOfAssets(int nAssetCount, int nKnownIDs)
@@ -94,6 +148,11 @@ namespace OpenSim.Data.Tests
                     // OK to fail if the table exists, don't want DBMS-specific "CREATE IF NOT EXISTS" syntax 
                 }
             }
+            else
+            {
+                // Clean up the table, to have a good timing
+                ExecuteSql("delete from assets;");
+            }
 
             UUID critter = UUID.Random();
             int duration = 0;
@@ -104,7 +163,7 @@ namespace OpenSim.Data.Tests
             AssetBase asset = new AssetBase(UUID.Random(), "random asset", (sbyte)AssetType.Texture, critter.ToString());
             for (int i = 0; i < nAssetCount; i++)
             {
-                asset.ID = UUID.Random().ToString();
+                asset.FullID = UUID.Random();
                 scrambler.Scramble(asset);
                 asset.Data = MakeRandomBlob(rnd);
 
@@ -139,7 +198,14 @@ namespace OpenSim.Data.Tests
             ExecQuery(sql, false,
                 delegate(IDataReader reader)
                 {
-                    list.Add(new UUID(reader.GetString(0)));
+                    object o = reader[0];
+                    if( o is Guid )
+                        list.Add(new UUID((Guid)o));
+                    else if (o is byte[])
+                        list.Add(new UUID((byte[])o, 0));
+                    else 
+                        list.Add(new UUID(o.ToString()));
+
                     return (nMax == 0) || (list.Count < nMax);  // continue?
                 }
             );
@@ -150,19 +216,18 @@ namespace OpenSim.Data.Tests
         // Note: Get() and ExistsAsset() are very similar to test. A good implementation must be
         // much faster on the 'exists' check than on full read.
         [Explicit]
-        [TestCase(1000, (int)ReadLevel.CheckOnly, true, Description = "Repeatedly check for assets (known to be there)")]
-        //        [TestCase(1000, ReadLevel.Meta, true, Description = "Repeatedly read metadata (known to be there)")]
-        [TestCase(1000, (int)ReadLevel.Full, true, Description = "Repeatedly read assets (known to be there)")]
+        [TestCase(10000, ReadLevel.CheckOnly, true, Description = "Repeatedly check for assets (known to be there)")]
+        [TestCase(10000, ReadLevel.Meta, true, Description = "Repeatedly read metadata (known to be there)")]
+        [TestCase(10000, ReadLevel.Full, true, Description = "Repeatedly read assets (known to be there)")]
 
-        [TestCase(1000, (int)ReadLevel.Full, false, Description = "Repeatedly read assets (missing)")]
-        //        [TestCase(1000, ReadLevel.Meta, false, Description = "Repeatedly read metadata (missing)")]
-        [TestCase(1000, (int)ReadLevel.CheckOnly, false, Description = "Repeatedly check for assets (missing)")]
+        [TestCase(10000, ReadLevel.Full, false, Description = "Repeatedly read assets (missing)")]
+        [TestCase(10000, ReadLevel.Meta, false, Description = "Repeatedly read metadata (missing)")]
+        [TestCase(10000, ReadLevel.CheckOnly, false, Description = "Repeatedly check for assets (missing)")]
 
-        public void T020_RandomAccessTest(int nChecks, int lvl, bool bKnownIDs)
+        public void T020_RandomAccessTest(int nChecks, ReadLevel Level, bool bKnownIDs)
         {
             Random rnd = new Random();
             int nFailed = 0;
-            ReadLevel Level = (ReadLevel)lvl;
 
             List<UUID> list = null;
             int nMax = 0;
@@ -170,10 +235,13 @@ namespace OpenSim.Data.Tests
             {
                 list = LoadKnownIDs(0);
                 nMax = list.Count;
-                Console.WriteLine("Fetched metadata of {0} assets", nMax);
+                Console.WriteLine("Fetched IDs of {0} assets", nMax);
             }
 
-            Console.WriteLine("Starting random access test ({0} iterations)...", nChecks);
+            string s = (Level == ReadLevel.CheckOnly) ? "AssetExists" : 
+                ((Level == ReadLevel.Full) ? "GetAsset" : "GetMetadata");
+            Console.WriteLine("Starting random {0} test ({1} iterations)...", s, nChecks);
+
             int start_time = Environment.TickCount;
             for (int i = 0; i < nChecks; i++)
             {
@@ -187,7 +255,8 @@ namespace OpenSim.Data.Tests
                             isThere = m_db.ExistsAsset(uid);
                             break;
                         case ReadLevel.Meta:
-                            // not impl in connectors?
+                            AssetMetadata meta = m_db.GetMetadata(uid);
+                            isThere = (meta != null);
                             break;
                         case ReadLevel.Full:
                             AssetBase a = m_db.GetAsset(uid);
@@ -210,15 +279,15 @@ namespace OpenSim.Data.Tests
             }
             int end_time = Environment.TickCount;
 
-            Console.WriteLine("Randomly checking existing assets {0} times took {1} ms", nChecks, end_time - start_time);
+            Console.WriteLine("Randomly checking existing assets {0} times took {1} sec", nChecks, (double)(end_time - start_time) / 1000.0);
 
-            Assert.That(nFailed == 0, String.Format("{0} assets of {1} couldn't be checked", nFailed, nMax));
+            Assert.That(nFailed, Is.EqualTo(0), String.Format("{0} assets of {1} couldn't be checked", nFailed, nMax));
         }
 
 
         [Explicit]
-        [TestCase(1000, true, Description = "Updating existing assets")]
-        [TestCase(1000, false, Description = "Updating new assets")]
+        [TestCase(10000, true, Description = "Updating existing assets")]
+        [TestCase(10000, false, Description = "Updating new assets")]
 
         public void T030_RandomUpdateTest(int nUpdates, bool bKnownIDs)
         {

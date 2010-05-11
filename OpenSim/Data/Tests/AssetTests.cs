@@ -53,9 +53,9 @@ namespace OpenSim.Data.Tests
 
     public class AssetTests<TConn, TAssetData> : BasicDataServiceTest<TConn, TAssetData>
         where TConn : DbConnection, new()
-        where TAssetData : AssetDataBase, new()
+        where TAssetData : class, IAssetDataPlugin, new()
     {
-        TAssetData m_db;
+        IAssetDataPlugin m_db;
 
         const bool COMPARE_CREATOR = true;
 
@@ -81,7 +81,7 @@ namespace OpenSim.Data.Tests
 
         protected override void InitService(object service)
         {
-            m_db = (TAssetData)service;
+            m_db = (IAssetDataPlugin)service;
             m_db.Initialise(m_connStr);
         }
 
@@ -156,6 +156,21 @@ namespace OpenSim.Data.Tests
                 Assert.That(metadata.Temporary, Is.EqualTo(a1b.Temporary));
                 Assert.That(metadata.FullID, Is.EqualTo(a1b.FullID));
             }
+
+            // Finally dropping the assets:
+
+            m_db.DeleteAsset(uuid1);
+            Assert.That(m_db.ExistsAsset(uuid1), Is.False);
+            Assert.That(m_db.ExistsAsset(uuid2), Is.True);
+            Assert.That(m_db.ExistsAsset(uuid3), Is.True);
+
+            m_db.DeleteAsset(uuid2);
+            Assert.That(m_db.ExistsAsset(uuid2), Is.False);
+            Assert.That(m_db.ExistsAsset(uuid3), Is.True);
+
+            m_db.DeleteAsset(uuid3);
+            Assert.That(m_db.ExistsAsset(uuid3), Is.False);
+
         }
     }
 }
