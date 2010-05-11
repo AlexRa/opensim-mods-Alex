@@ -46,6 +46,7 @@ namespace OpenSim.Tests.Common.Mock
         public void Initialise() {}
         public void Initialise(string connect) {}
         public void Dispose() {}
+        public void Flush() {}
 
         private readonly List<AssetBase> assets = new List<AssetBase>();
 
@@ -54,9 +55,20 @@ namespace OpenSim.Tests.Common.Mock
             return assets.Find(x=>x.FullID == uuid);
         }
 
+        public AssetMetadata GetMetadata(UUID uuid)
+        {
+            AssetBase asset = assets.Find(x => x.FullID == uuid);
+            return asset == null ? null : asset.Metadata;
+        }
+
         public void StoreAsset(AssetBase asset)
         {
             assets.Add(asset);
+        }
+
+        public bool DeleteAsset(UUID assetID)
+        {
+            return false;  
         }
 
         public List<AssetMetadata> FetchAssetMetadataSet(int start, int count) { return new List<AssetMetadata>(count); }
