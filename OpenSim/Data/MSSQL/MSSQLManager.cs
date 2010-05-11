@@ -116,10 +116,6 @@ namespace OpenSim.Data.MSSQL
         {
             Type valueType = value.GetType();
 
-            if (valueType == typeof(UUID)) //TODO check if this works
-            {
-                return ((UUID) value).Guid;
-            }
             if (valueType == typeof(UUID))
             {
                 return ((UUID)value).Guid;
