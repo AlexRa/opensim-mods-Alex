@@ -75,7 +75,10 @@ namespace OpenSim.Data.Tests
     [TestFixture(typeof(SqlConnection), typeof(MSSQLAssetData), false, false,
         Description = "Asset performance tests (MS SQL Server, Disconnecting)")]
 
-//    [TestFixture(typeof(SqliteConnection), typeof(SQLiteAssetData), Description = "Asset performance tests (SQLite)")]
+    [TestFixture(typeof(SqliteConnection), typeof(SQLiteAssetData), false, true,
+        Description = "SQLite Asset performance tests (KeepAlive)")]
+    [TestFixture(typeof(SqliteConnection), typeof(SQLiteAssetData), false, false,
+        Description = "SQLite Asset performance tests (Disconnecting)")]
 
     class AssetPerformanceTest<TConn, TAssetData> : BasicDataServiceTest<TConn, TAssetData>
         where TConn : DbConnection, new()
@@ -126,9 +129,9 @@ namespace OpenSim.Data.Tests
             return data;
         }
 
-        [TestCase(1000, 1000)]
-        [TestCase(10000, 10000)]
-        [TestCase(100000, 1000), Explicit]
+//      [TestCase(1000, 1000)]
+        [TestCase(10000, 10000), Explicit]
+//      [TestCase(100000, 1000), 
 
         public void T010_StoreLotsOfAssets(int nAssetCount, int nKnownIDs)
         {
