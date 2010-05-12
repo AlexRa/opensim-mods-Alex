@@ -61,11 +61,12 @@ CREATE TABLE assets_new(
 	Local,
 	Temporary,
 	CreatorID,
+	asset_flags NOT NULL DEFAULT 0,
 	Data
 );
 
 INSERT INTO assets_new SELECT 
-	UUID, Name, Description, Type, Local, Temporary, CreatorID, Data FROM assets;
+	UUID, Name, Description, Type, Local, Temporary, CreatorID, 0, Data FROM assets;
 DROP TABLE assets;
 ALTER TABLE assets_new RENAME TO assets;
   

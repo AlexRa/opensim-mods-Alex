@@ -52,8 +52,8 @@ namespace OpenSim.Data
 
         public AssetDataBase() : base()
         {
-            GetAssetCmd = new Cmd(this, "SELECT name, assetType, creatorid, description, local, temporary, data FROM assets WHERE id = @id", typeof(UUID));
-            GetMetaCmd = new Cmd(this, "SELECT name, assetType, creatorid, description, local, temporary FROM assets WHERE id = @id", typeof(UUID));
+            GetAssetCmd = new Cmd(this, "SELECT name, assetType, creatorid, description, local, temporary, asset_flags, data FROM assets WHERE id = @id", typeof(UUID));
+            GetMetaCmd = new Cmd(this, "SELECT name, assetType, creatorid, description, local, temporary, asset_flags FROM assets WHERE id = @id", typeof(UUID));
             CheckCmd = new Cmd(this, "SELECT local FROM assets WHERE id = @id", typeof(UUID));
             DeleteCmd = new Cmd(this, "DELETE FROM assets WHERE id = @id", typeof(UUID));
             // NOTE:  no SQL for StoreAsset() here, because the UPDATE/INSERT implementation will be different!
@@ -99,6 +99,7 @@ namespace OpenSim.Data
                         asset.Description = reader["description"].ToString();
                         asset.Local = DBMS.DbToBool(reader["local"]);
                         asset.Temporary = DBMS.DbToBool(reader["temporary"]);
+                        asset.Flags = (AssetFlags)Convert.ToInt32(reader["asset_flags"]);
                         asset.Data = (byte[])reader["data"];
                         m_got_asset_count++;
                         return false;
@@ -127,6 +128,7 @@ namespace OpenSim.Data
             meta.Description = reader["description"].ToString();
             meta.Local = DBMS.DbToBool(reader["local"]);
             meta.Temporary = DBMS.DbToBool(reader["temporary"]);
+            meta.Flags = (AssetFlags)Convert.ToInt32(reader["asset_flags"]);
 
             // Current SHA1s are not stored/computed.
             meta.SHA1 = new byte[] { };

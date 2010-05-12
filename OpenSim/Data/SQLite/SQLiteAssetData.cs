@@ -48,16 +48,14 @@ namespace OpenSim.Data.SQLite
         public SQLiteAssetData()
             : base()
         {
-            InsertCmd = new Cmd(this, "insert into assets(ID, Name, Description, AssetType, Local, Temporary, CreatorID, Data) values(" +
-                "@ID, @Name, @Description, @AssetType, @Local, @Temporary, @CreatorID, @Data)",
-                typeof(UUID), typeof(string), typeof(string), typeof(sbyte), typeof(bool), typeof(bool), typeof(UUID), typeof(byte[])
+            InsertCmd = new Cmd(this, "insert into assets(ID, Name, Description, AssetType, Local, Temporary, CreatorID, asset_flags, Data) values(" +
+                "@ID, @Name, @Description, @AssetType, @Local, @Temporary, @CreatorID, @asset_flags, @Data)"
                 );
 
-            UpdateCmd = new Cmd(this, "update assets set Name=@Name, Description=@Description, AssetType=@AssetType, Local=@Local, Temporary=@Temporary, CreatorID=@CreatorID, Data=@Data where ID=@ID",
-                typeof(string), typeof(string), typeof(sbyte), typeof(bool), typeof(bool), typeof(UUID), typeof(byte[]), typeof(UUID)
+            UpdateCmd = new Cmd(this, "update assets set Name=@Name, Description=@Description, AssetType=@AssetType, Local=@Local, Temporary=@Temporary, CreatorID=@CreatorID, asset_flags=@asset_flags, Data=@Data where ID=@ID"
                 );
 
-            MetaListCmd = new Cmd(this, "select ID, Name, Description, AssetType, Local, Temporary, CreatorID from assets limit @start, @count",
+            MetaListCmd = new Cmd(this, "select ID, Name, Description, AssetType, Local, Temporary, CreatorID, asset_flags from assets limit @start, @count",
                 typeof(int), typeof(int));
         }
 
@@ -108,7 +106,7 @@ namespace OpenSim.Data.SQLite
                 // Name, Description, Type, Local, Temporary, CreatorID, Data, ID
                 UpdateCmd.Exec(
                     asset.Name, asset.Description, asset.Type, DBMS.BoolToDb(asset.Local), 
-                    DBMS.BoolToDb(asset.Temporary), DBMS.UuidToDb(asset.Metadata.CreatorID), asset.Data, DBMS.UuidToDb(asset.FullID)
+                    DBMS.BoolToDb(asset.Temporary), DBMS.UuidToDb(asset.Metadata.CreatorID), (int)asset.Flags, asset.Data, DBMS.UuidToDb(asset.FullID)
                 );
             }
             else
@@ -116,7 +114,7 @@ namespace OpenSim.Data.SQLite
                 // ID, Name, Description, Type, Local, Temporary, CreatorID, Data
                 InsertCmd.Exec(
                     DBMS.UuidToDb(asset.FullID), asset.Name, asset.Description, asset.Type, DBMS.BoolToDb(asset.Local),
-                    DBMS.BoolToDb(asset.Temporary), DBMS.UuidToDb(asset.Metadata.CreatorID), asset.Data
+                    DBMS.BoolToDb(asset.Temporary), DBMS.UuidToDb(asset.Metadata.CreatorID), (int)asset.Flags, asset.Data
                 );
             }
         }

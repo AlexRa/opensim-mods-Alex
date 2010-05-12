@@ -53,20 +53,16 @@ namespace OpenSim.Data.MSSQL
                  "IF EXISTS(SELECT * FROM [assets] WHERE id = @id) " +
                  "  UPDATE [assets] SET [name] = @name, [description] = @description, [assetType] = @assetType, " +
                  "  [local] = @local, [temporary] = @temporary, [create_time] = @create_time, [access_time] = @access_time, " +
-                 "  [creatorid] = @creatorid, [data] = @data WHERE id = @id" + 
-                 " ELSE " + 
-                 "  INSERT INTO assets ([id], [name], [description], [assetType], [local], [temporary], [create_time], [access_time], [creatorid], [data]) " +
-                 "  VALUES (@id, @name, @description, @assetType, @local, @temporary, @create_time, @access_time, @creatorid, @data)",
-                 typeof(UUID), 
-                 typeof(string), typeof(string), typeof(sbyte), 
-                 typeof(bool), typeof(bool), typeof(int), typeof(int),
-                 typeof(UUID), typeof(byte[])
+                 "  [creatorid] = @creatorid, [asset_flags] = @asset_flags, [data] = @data WHERE id = @id" + 
+                 " ELSE " +
+                 "  INSERT INTO assets ([id], [name], [description], [assetType], [local], [temporary], [create_time], [access_time], [creatorid], [asset_flags], [data]) " +
+                 "  VALUES (@id, @name, @description, @assetType, @local, @temporary, @create_time, @access_time, @creatorid, @asset_flags, @data)"
                  );
 
             MetaListCmd = new Cmd(this,
                 @"WITH OrderedAssets AS
                 (
-                    SELECT [id], [name], [description], [assetType], [local], [temporary], [creatorid],
+                    SELECT [id], [name], [description], [assetType], [local], [temporary], [creatorid], [asset_flags],
                     [RowNumber] = ROW_NUMBER() OVER (ORDER BY [id])
                     FROM assets 
                 ) 
@@ -92,7 +88,7 @@ namespace OpenSim.Data.MSSQL
             {
                 // @id, @name, @descr, @assetType, @local, @temporary, @create_time, @access_time, @creatorid, @data
                 StoreCmd.Exec(asset.FullID, assetName, assetDescription, (int)asset.Type, asset.Local,
-                    asset.Temporary, now, now, asset.Metadata.CreatorID, asset.Data);
+                    asset.Temporary, now, now, asset.Metadata.CreatorID, (int)asset.Flags, asset.Data);
             }
             catch(Exception e)
             {

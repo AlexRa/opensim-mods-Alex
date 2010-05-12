@@ -58,16 +58,15 @@ namespace OpenSim.Data.MySQL
         {
 #if DELAYED_ACCESS_UPDATE
             UpdateAccessTimesCmd = new Cmd(this, "call flush_asset_log();");
-            GetAssetCmd = new Cmd(this, "SELECT name, assetType, creatorid, description, local, temporary, data " +
+            GetAssetCmd = new Cmd(this, "SELECT name, assetType, creatorid, description, local, temporary, asset_flags, data " +
                 ", mark_asset_read(id, access_time, 10) is_updated " +
                 " FROM assets WHERE id = @id", typeof(UUID));
 
 #endif
-            UpdateCmd = new Cmd(this, "replace INTO assets(id, name, description, assetType, local, temporary, data, CreatorID, create_time, access_time)" +
-                            "VALUES(@id, @name, @description, @assetType, @local, @temporary, @data, @CreatorID, UNIX_TIMESTAMP(), UNIX_TIMESTAMP())",
-                            typeof(UUID), typeof(string), typeof(string), typeof(sbyte), typeof(bool), typeof(bool), typeof(byte[]), typeof(UUID)
+            UpdateCmd = new Cmd(this, "replace INTO assets(id, name, description, assetType, local, temporary, asset_flags, data, CreatorID, create_time, access_time)" +
+                            "VALUES(@id, @name, @description, @assetType, @local, @temporary, @asset_flags, @data, @CreatorID, UNIX_TIMESTAMP(), UNIX_TIMESTAMP())"
                             );
-            MetaListCmd = new Cmd(this, "SELECT id,name,description,assetType,temporary,local,CreatorID FROM assets LIMIT @start, @count",
+            MetaListCmd = new Cmd(this, "SELECT id,name,description,assetType,temporary,local,CreatorID,asset_flags FROM assets LIMIT @start, @count",
                             typeof(int), typeof(int));
         }
 
@@ -137,7 +136,7 @@ namespace OpenSim.Data.MySQL
             try
             {
                 // id, name, description, assetType, local, temporary, data, creator
-                UpdateCmd.Exec(asset.FullID, assetName, assetDescription, asset.Type, asset.Local, asset.Temporary, asset.Data, new UUID(asset.Metadata.CreatorID));
+                UpdateCmd.Exec(asset.FullID, assetName, assetDescription, (int)asset.Type, asset.Local, asset.Temporary, (int)asset.Flags, asset.Data, new UUID(asset.Metadata.CreatorID));
             }
             catch (Exception e)
             {
