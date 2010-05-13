@@ -49,8 +49,21 @@ namespace OpenSim.Data
             string[] m_parms = null;    // Parameter names, extracted from the SQL
             Type[] m_partypes;
             string m_table;
-            static private readonly Regex rex_params = new Regex(@"@(\w+)");        //(@"^[^@]+(?:@(\w+)[^@]*)*$"); 
+            static private readonly Regex rex_params = new Regex(@"@(\w+)");
 
+            /// <summary>Construct a Cmd based on an SQL query and an optional list of
+            /// parameter types, in the same order they first appear in the SQL.
+            /// In most cases each '@param' in SQL query corresponds to a 
+            /// table column and their names match (e.g. 'WHERE id=@id'). 
+            /// We fetch (elsewhere) the column info from the DB and map it to parameters,
+            /// so no type info for parameters usually need to be specified.
+            /// We do need to know the param types if they don't match data columns though,
+            /// such as for 'LIMIT @start, @count'. If only some params need the type, you
+            /// can specify others as 'null', but they all must be present and be in the correct order.
+            /// </summary>
+            /// <param name="owner"></param>
+            /// <param name="sql"></param>
+            /// <param name="types"></param>
             public Cmd(BaseDataBase owner, string sql, params Type[] types)
             {
                 m_owner = owner;
@@ -86,7 +99,8 @@ namespace OpenSim.Data
                 }
 
                 int n = lst.Count;
-                if (m_partypes.Length != n)
+                int l = m_partypes.Length;  // List of param types is optional, but if present, must match the param number in the SQL
+                if ( (l > 0) && (l != n) )
                     throw new Exception(String.Format("Invalid SQL Cmd: {0} types for {1} params", m_partypes.Length, lst.Count));
 
                 m_parms = new string[n];

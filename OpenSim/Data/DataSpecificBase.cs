@@ -136,10 +136,11 @@ namespace OpenSim.Data
                 }
             }
 
+            bool has_types = (types != null) && (types.Length > 0);
             cmd.Parameters.Clear();
             for(int i = 0; i < n; i++)
             {
-                Type t = types != null ? types[i] : null;
+                Type t = has_types ? types[i] : null;
                 DbParameter par = MakeParam(cmd, param_names[i], t, rows[i]);
                 cmd.Parameters.Add(par);
             }
