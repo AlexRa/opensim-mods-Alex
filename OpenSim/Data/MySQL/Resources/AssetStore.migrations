@@ -128,16 +128,11 @@ end $$
 
 DELIMITER ;
 
-:VERSION 9
-
-ALTER TABLE assets ADD COLUMN asset_flags INTEGER NOT NULL DEFAULT 0;
-
-
 # ----------------- Changing to BINARY UUIDs (disabled)!
 
 
-# ----------------- CHANGE VERSION TO 10 to enable this
-:VERSION 1
+# ----------------- CHANGE VERSION TO 9 to enable this
+:VERSION 9
 
 alter table assets add( 
 	idx binary(16),
@@ -232,7 +227,7 @@ from assets a left join asset_types t on a.assetType = t.assetType;
   
 
 # ------------------- CHANGE VERSION TO 11 to enable  this
-:VERSION 1  
+:VERSION 10  
 
 # (Same as Ver 8, but using BINARY(16) for the UID
 
@@ -282,3 +277,7 @@ end $$
 
 DELIMITER ;
 
+
+:VERSION 11
+
+ALTER TABLE assets ADD COLUMN asset_flags INTEGER NOT NULL DEFAULT 0;

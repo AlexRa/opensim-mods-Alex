@@ -61,7 +61,6 @@ CREATE TABLE assets_new(
 	Local,
 	Temporary,
 	CreatorID,
-	asset_flags NOT NULL DEFAULT 0,
 	Data
 );
 
@@ -71,4 +70,10 @@ DROP TABLE assets;
 ALTER TABLE assets_new RENAME TO assets;
   
 COMMIT;
+  
+:VERSION 7
+
+alter table assets
+  add asset_flags not null default 0;
+
   
