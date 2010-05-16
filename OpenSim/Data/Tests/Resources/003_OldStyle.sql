@@ -1,0 +1,1 @@
+﻿update version_test set v3 = magic;

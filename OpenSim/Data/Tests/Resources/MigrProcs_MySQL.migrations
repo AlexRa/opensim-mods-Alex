@@ -1,0 +1,51 @@
+﻿#
+#	Define several stored functions (MySQL), separated by :GO.  
+#	This tests if the new migration format correctly works
+#	around the delimiter issues in MySQL.
+#
+#  We'll always run this migration test from scratch, so Ver.1 makes sure we start clean
+#  and no (DBMS-specific) DROP logic is needed in the test code.
+#
+#	(the extra SETs in the functions to ensure there are several ";" inside)
+
+:VERSION 1
+
+drop function if exists f1;
+drop function if exists f2;
+drop function if exists f3;
+
+:VERSION 2
+
+create function f1()
+returns int
+  return 1;
+
+:GO
+
+delimiter $$$
+
+create function f2()
+returns int
+begin
+  set @a = 2;
+  return @a;
+end $$$
+
+delimiter ;
+
+:GO   
+
+delimiter $$$
+
+create function f3()
+returns int
+begin
+  set @b = 3;
+  return @b;
+end $$$
+
+delimiter ;
+
+:VERSION 3
+
+update version_test set v1 = f1(), v2 = f2(), v3 = f3();
