@@ -130,7 +130,7 @@ namespace OpenSim.Data
                 m_cmd = m_owner.m_conn.CreateCommand();
                 m_cmd.CommandText = m_sql;
 
-                DBMS.Prepare(m_cmd, m_parms, m_partypes, schema);
+                m_owner.m_DBMS.Prepare(m_cmd, m_parms, m_partypes, schema);
             }
 
             public void Disconnect()
@@ -148,12 +148,12 @@ namespace OpenSim.Data
                     throw new Exception(String.Format("This query must be called with {0} parameters", nPars));
 
                 for (int i = 0; i < nPars; i++)
-                    DBMS.SetParamValue(m_cmd.Parameters[i], parms[i]); 
+                    m_owner.m_DBMS.SetParamValue(m_cmd.Parameters[i], parms[i]); 
             }
 
             private bool TryReconnect(Exception e, object[] parms)
             {
-                if (!DBMS.NeedReconnect(m_cmd, e))
+                if (!m_owner.m_DBMS.NeedReconnect(m_cmd, e))
                     return false;
 
                 m_log.WarnFormat("[{0}] Trying to reconnect after error: {1}", m_owner.Name, e.Message);

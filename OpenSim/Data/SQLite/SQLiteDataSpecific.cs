@@ -29,6 +29,8 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using OpenSim.Data;
+using System.Data.Common;
+using Mono.Data.Sqlite;
 
 namespace OpenSim.Data.SQLite
 {
@@ -37,6 +39,11 @@ namespace OpenSim.Data.SQLite
         public override string DBName()
         {
             return "SQLite";
+        }
+
+        public override DbConnection GetNewConnection(BaseDataBase owner, string conn_str)
+        {
+            return new SqliteConnection(conn_str);
         }
     }
 }

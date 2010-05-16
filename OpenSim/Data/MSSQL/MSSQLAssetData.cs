@@ -40,7 +40,7 @@ namespace OpenSim.Data.MSSQL
     /// <summary>
     /// A MSSQL Interface for the Asset server
     /// </summary>
-    public class MSSQLAssetData : AssetDataBase<SqlConnection, MSSQLDataSpecific>
+    public class MSSQLAssetData : AssetDataBase<MSSQLDataSpecific>
     {
         public Cmd StoreCmd;
         public Cmd MetaListCmd;

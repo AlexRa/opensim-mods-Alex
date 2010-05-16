@@ -56,9 +56,19 @@ namespace OpenSim.Data
     /// </example>
     public class DataSpecificBase
     {
-
         public DataSpecificBase()   // must have a default ctr to satisfy 'new()' constraint in BaseDataBaseEx
         {
+        }
+
+        /// <summary>Create a new connection and set the provided conn string into it. Will be actually opened
+        /// by the caller. MUST override in each derived class!
+        /// </summary>
+        /// <param name="owner">Just in case we need to know KeepAlive or something. Probably shouldn't hold on it</param>
+        /// <param name="conn_str">The conn string (might be preprocessed before actually passing it to the DB)</param>
+        /// <returns></returns>
+        public virtual DbConnection GetNewConnection(BaseDataBase owner, string conn_str)
+        {
+            throw new NotImplementedException();
         }
 
         public virtual string DBName()

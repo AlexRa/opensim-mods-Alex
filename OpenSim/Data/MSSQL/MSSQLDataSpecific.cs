@@ -18,6 +18,11 @@ namespace OpenSim.Data.MSSQL
             return "MS SQL";
         }
 
+        public override DbConnection GetNewConnection(BaseDataBase owner, string conn_str)
+        {
+            return new SqlConnection(conn_str);
+        }
+
         protected override DbParameter MakeParam(DbCommand cmd, string sName, Type type, DataRow sch_row)
         {
             SqlParameter par = new SqlParameter();

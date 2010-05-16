@@ -37,8 +37,7 @@ using System.Data.Common;
 namespace OpenSim.Data
 {
     [Table("assets")]
-    public class AssetDataBase<TConn, TDataSpec> : BaseDataBaseEx<TConn, TDataSpec>, IAssetDataPlugin
-        where TConn : DbConnection, new()
+    public class AssetDataBase<TDataSpec> : BaseDataBaseEx<TDataSpec>, IAssetDataPlugin
         where TDataSpec : DataSpecificBase, new() 
     {
         public Cmd GetAssetCmd;

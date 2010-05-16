@@ -39,7 +39,7 @@ namespace OpenSim.Data.SQLite
     /// <summary>
     /// An asset storage interface for the SQLite database system
     /// </summary>
-    public class SQLiteAssetData : AssetDataBase<SqliteConnection, SQLiteDataSpecific> 
+    public class SQLiteAssetData : AssetDataBase<SQLiteDataSpecific> 
     {
         public Cmd InsertCmd;
         public Cmd UpdateCmd;

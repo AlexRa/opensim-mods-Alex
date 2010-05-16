@@ -41,7 +41,7 @@ namespace OpenSim.Data.MySQL
     /// <summary>
     /// A MySQL Interface for the Asset Server
     /// </summary>
-    public sealed class MySQLAssetData : AssetDataBase<MySqlConnection, MySqlDataSpecific>
+    public sealed class MySQLAssetData : AssetDataBase<MySqlDataSpecific>
     {
         // NOTE: all Cmds must be PUBLIC, as they are scanned from the base class using Reflection!
         public Cmd UpdateCmd;

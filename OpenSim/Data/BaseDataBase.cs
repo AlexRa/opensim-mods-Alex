@@ -56,20 +56,14 @@ namespace OpenSim.Data
     /// DBMS-independent way. From that, we further derive DBMS-specific versions where
     /// the rest of the stuff is implemented (only then the generic TConn is resolved).
     /// </summary>
-    /// <typeparam name="TConn">The specific DBMS connection to be used by the class</typeparam>
+    /// <typeparam name="TDataSpec">The DBMS-specific class to be used by this connector</typeparam>
     /// 
-    public class BaseDataBaseEx<TConn, TDataSpec> : BaseDataBase
-        where TConn : DbConnection, new()
+    public class BaseDataBaseEx<TDataSpec> : BaseDataBase
         where TDataSpec : DataSpecificBase, new()   
     {
-        protected override DbConnection GetNewConnection()
+        public BaseDataBaseEx() :
+            base(new TDataSpec())
         {
-            return new TConn();
-        }
-
-        static BaseDataBaseEx()
-        {
-            DBMS = new TDataSpec();
         }
     }
 
@@ -81,7 +75,9 @@ namespace OpenSim.Data
         protected DbConnection m_conn = null;
         protected List<Cmd> m_cmds = new List<Cmd>();
         protected object m_dbLock = new object();
-        protected static DataSpecificBase DBMS = null;
+        protected readonly DataSpecificBase m_DBMS = null;
+
+        public DataSpecificBase DBMS { get { return m_DBMS; } }
 
         /* One DataPlugin class can work with several tables. We scan table info on demand from individual commands
          * and do it only once.  We have to scan table structure for two reasons: 
@@ -103,9 +99,9 @@ namespace OpenSim.Data
 
         public delegate bool ProcessRow(IDataReader reader);
 
-        protected virtual DbConnection GetNewConnection()
+        protected BaseDataBase(DataSpecificBase dbms)
         {
-            throw new NotImplementedException(); 
+            m_DBMS = dbms;
         }
 
         protected virtual string GetMigrationStore()
@@ -127,11 +123,10 @@ namespace OpenSim.Data
         protected virtual void Connect()
         {
             if( m_conn == null )
-                m_conn = GetNewConnection();
+                m_conn = m_DBMS.GetNewConnection(this, m_connStr);
 
             if (m_conn.State != ConnectionState.Open)
             {
-                m_conn.ConnectionString = m_connStr;
                 m_conn.Open();
             }
         }
@@ -266,12 +261,11 @@ namespace OpenSim.Data
                 TryConnParamToBool(ka, ref m_keepAlive); 
 
             m_connStr = connect;
-            using (DbConnection connection = GetNewConnection())
+            using (DbConnection connection = m_DBMS.GetNewConnection(this, m_connStr))
             {
-                connection.ConnectionString = m_connStr;
                 connection.Open();
                 Assembly assem = GetType().Assembly;
-                Migration migration = DBMS.GetMigration();
+                Migration migration = m_DBMS.GetMigration();
                 migration.Initialize(connection, assem, GetMigrationStore(), "");
                 migration.Update();
             }

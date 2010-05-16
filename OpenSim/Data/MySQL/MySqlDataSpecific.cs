@@ -46,6 +46,19 @@ namespace OpenSim.Data.MySQL
             return "MySQL";
         }
 
+        public override DbConnection GetNewConnection(BaseDataBase owner, string conn_str)
+        {
+            // Unless explicitly set in the conn string, we want the Prepare() method enabled!
+            if (owner.KeepAlive && (conn_str.IndexOf("IgnorePrepare", StringComparison.InvariantCultureIgnoreCase) < 0) )
+            {
+                if (!conn_str.EndsWith(";"))
+                    conn_str += ";";
+                conn_str += "IgnorePrepare=false";
+            }
+
+            return new MySqlConnection(conn_str);
+        }
+
         protected override DbParameter MakeParam(DbCommand cmd, string sName, Type type, DataRow sch_row)
         {
             MySqlParameter par = new MySqlParameter();
@@ -77,7 +90,6 @@ namespace OpenSim.Data.MySQL
 
             return par;
         }
-
 
         // NOTE: MySql driver doesn't correctly map MySqlDbType to DbType, so we must have the override:
 
