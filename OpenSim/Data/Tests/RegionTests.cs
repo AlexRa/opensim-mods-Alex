@@ -51,9 +51,9 @@ using OpenSim.Data.SQLite;
 
 namespace OpenSim.Data.Tests
 {
-    [TestFixture(typeof(MySqlConnection), typeof(MySqlRegionData), Description = "Region store tests (MySQL)")]
-    [TestFixture(typeof(SqlConnection), typeof(MSSQLRegionData), Description = "Region store tests (MS SQL Server)")]
-    [TestFixture(typeof(SqliteConnection), typeof(SQLiteRegionData), Description = "Region store tests (SQLite)")]
+    [TestFixture(typeof(MySqlConnection), typeof(MySQLRegionDataStore), Description = "Region store tests (MySQL)")]
+    [TestFixture(typeof(SqlConnection), typeof(MSSQLRegionDataStore), Description = "Region store tests (MS SQL Server)")]
+    [TestFixture(typeof(SqliteConnection), typeof(SQLiteRegionDataStore), Description = "Region store tests (SQLite)")]
 
     public class RegionTests<TConn, TRegStore> : BasicDataServiceTest<TConn, TRegStore>
         where TConn : DbConnection, new()
