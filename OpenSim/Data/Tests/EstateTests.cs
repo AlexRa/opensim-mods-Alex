@@ -334,8 +334,7 @@ namespace OpenSim.Data.Tests
             // Letting estate store generate rows to database for us
             EstateSettings originalSettings = db.LoadEstateSettings(regionId, true);
 
-            SetEstateSettings(
-                originalSettings,
+            SetEstateSettings(originalSettings,
                 estateName,
                 parentEstateID,
                 billableFactor,
@@ -361,30 +360,6 @@ namespace OpenSim.Data.Tests
                 estateOwner
                 );
 
-            originalSettings.EstateName = estateName;
-            originalSettings.ParentEstateID = parentEstateID;
-            originalSettings.BillableFactor = billableFactor;
-            originalSettings.PricePerMeter = pricePerMeter;
-            originalSettings.RedirectGridX = redirectGridX;
-            originalSettings.RedirectGridY = redirectGridY;
-            originalSettings.UseGlobalTime = useGlobalTime;
-            originalSettings.FixedSun = fixedSun;
-            originalSettings.SunPosition = sunPosition;
-            originalSettings.AllowVoice = allowVoice;
-            originalSettings.AllowDirectTeleport = allowDirectTeleport;
-            originalSettings.ResetHomeOnTeleport = resetHomeOnTeleport;
-            originalSettings.DenyAnonymous = denyAnonymous;
-            originalSettings.DenyIdentified = denyIdentified;
-            originalSettings.DenyTransacted = denyTransacted;
-            originalSettings.DenyMinors = denyMinors;
-            originalSettings.AbuseEmailToEstateOwner = abuseEmailToEstateOwner;
-            originalSettings.BlockDwell = blockDwell;
-            originalSettings.EstateSkipScripts = estateSkipScripts;
-            originalSettings.TaxFree = taxFree;
-            originalSettings.PublicAccess = publicAccess;
-            originalSettings.AbuseEmail = abuseEmail;
-            originalSettings.EstateOwner = estateOwner;
-
             // Saving settings.
             db.StoreEstateSettings(originalSettings);
 
@@ -392,8 +367,7 @@ namespace OpenSim.Data.Tests
             EstateSettings loadedSettings = db.LoadEstateSettings(regionId, true);
 
             // Checking that loaded values are correct.
-            ValidateEstateSettings(
-                loadedSettings,
+            ValidateEstateSettings(loadedSettings,
                 estateName,
                 parentEstateID,
                 billableFactor,
