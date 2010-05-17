@@ -150,5 +150,22 @@ namespace OpenSim.Data.Tests
             }
             return nRecs;
         }
+
+        /// <summary>Drop tables (listed as parameters). There is no "DROP IF EXISTS" syntax common for all
+        /// databases, so we just DROP and ignore an exception.
+        /// </summary>
+        /// <param name="tables"></param>
+        protected virtual void DropTables(params string[] tables)
+        {
+            foreach (string tbl in tables)
+            {
+                try
+                {
+                    ExecuteSql("DROP TABLE " + tbl + ";");
+                }catch
+                {
+                }
+            }
+        }
     }
 }
