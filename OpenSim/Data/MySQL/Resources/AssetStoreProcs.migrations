@@ -1,0 +1,168 @@
+﻿# -----------------
+:VERSION 1
+
+# The delayed access time update: on each asset fetch, a function is included into the SELECT
+# that adds the requested UUID to an intermediate table; then a separate proc call updates
+# all access times in [assets] from that table
+
+# NOTE: Why such complications? Because a function used in SELECT can't update the same table directly!  
+  
+# NOTE: if you use a persistent ENGINE instead of MEMORY, asset access may become a little slower (?),
+# but the DB will be able to live without asset_flush_log() for a long time.
+
+DROP TABLE IF EXISTS asset_access_log;
+CREATE TABLE  asset_access_log (
+  id char(36) NOT NULL PRIMARY KEY,
+  access_time int NOT NULL
+)  ENGINE=MEMORY;
+-- ENGINE=MyISAM;
+
+:GO
+
+DROP function IF EXISTS asset_accessed;
+DROP PROCEDURE IF EXISTS asset_flush_log;
+
+:GO
+
+# This function to be referenced when getting an asset:
+
+#    SELECT *, asset_accessed(id, 3600) FROM assets WHERE ..."
+
+# The <update_threshold> parameter defines the minimum update interval, in sec.
+# If the same asset is fetched twice within that interval, the access time will only be
+# updated on the 1st call.
+
+# The result returned by the function is mostly for debugging it directly in MySQL Query Browser.
+# Most likely it will never be used from the code, but a function must return something anyway.
+
+DELIMITER $$
+
+create function asset_accessed(myid char(36), last_access int, update_threshold int) returns tinyint
+begin
+  declare last_logged_access int default 0;
+
+  if (UNIX_TIMESTAMP() - last_access) < update_threshold then 
+     return 0;
+  end if;
+  
+  select access_time into last_logged_access from asset_access_log where id=myid limit 1;
+
+  if last_logged_access = 0 then
+    insert delayed into asset_access_log values(myid, UNIX_TIMESTAMP());
+    return 2;
+  end if;
+
+  if (UNIX_TIMESTAMP() - last_logged_access) > update_threshold then
+    UPDATE LOW_PRIORITY IGNORE asset_access_log set access_time = UNIX_TIMESTAMP() WHERE id=myid;
+    return 1;
+  end if;
+
+  return 0;
+end $$
+
+DELIMITER ;
+
+:GO
+
+# This proc must be (or should be, if `asset_access_log` is persistent) called occasionally
+# to copy the access times to the `assets` table. Optionally, it cleans up the access log.
+
+DELIMITER $$
+
+CREATE PROCEDURE asset_flush_log(bClear tinyint)
+begin
+  START TRANSACTION;
+  update low_priority ignore assets, asset_access_log
+    set assets.access_time = asset_access_log.access_time
+    where assets.id = asset_access_log.id and assets.access_time < asset_access_log.access_time;
+  if bClear <> 0 then
+	delete from asset_access_log;
+  end if;
+  COMMIT;
+end $$
+
+DELIMITER ;
+
+:GO
+
+# Redefine f_asset_ver() at the end of each section to return the section number.
+# This is used to ensure the version in `migrations` is in sync with the actual code
+DROP FUNCTION IF EXISTS f_asset_ver;
+CREATE FUNCTION f_asset_ver() returns tinyint return 1;
+
+:VERSION 2
+
+# This is an alternative implementation of the same functionality. The stuff here is named
+# differently, so both version can coexists and we can call either one from the code.
+# This is mostly needed for testing and one of the implementations may be removed later.
+
+# This version of the log table intentionally does NOT have a primary key or index.  
+# We just add to it on every asset access. Index it, group it, etc. only when it's actually
+# being merged.  The merging will take longer and the table will be growing fast (better merge
+# it often!), but the access logging should be faster. 
+
+# The ENGINE=MEMORY option is not suggested here - very easy to run out of memory!
+# ENGINE=MyISAM remains the only option - must support INSERT DELAYED!
+# will run much slower with InnoDB!
+
+DROP TABLE IF EXISTS asset_access_log1;
+CREATE TABLE  asset_access_log1 (
+  id char(36) NOT NULL,
+  access_time int NOT NULL
+)  ENGINE=MyISAM;
+:GO
+
+DROP function IF EXISTS asset_accessed1;
+DROP PROCEDURE IF EXISTS asset_flush_log1;
+
+:GO
+
+# This function to be referenced when getting an asset:
+
+#    SELECT *, asset_accessed1(id, access_time, 3600) FROM assets WHERE ..."
+
+# The <update_threshold> parameter defines the minimum update interval, in sec.
+# If the same asset is fetched twice within that interval, the access time will only be
+# updated on the 1st call. This logic only works well if the log file is merged
+# into `assets` often.
+
+DELIMITER $$
+
+create function asset_accessed1(myid char(36), last_access int, update_threshold int) returns tinyint
+begin
+  if (UNIX_TIMESTAMP() - last_access) < update_threshold then 
+     return 0;
+  end if;
+  INSERT DELAYED into asset_access_log1 values(myid, UNIX_TIMESTAMP());
+  return 2;
+end $$
+
+DELIMITER ;
+
+:GO
+
+# This proc must be called regularly to copy the access times to the `assets` table. 
+# Afterwards, it cleans up the access log.
+
+DELIMITER $$
+
+CREATE PROCEDURE asset_flush_log1()
+begin
+  START TRANSACTION;
+  create temporary table xlog(id char(36) not null primary key, access_time int);
+  insert into xlog
+    select id, MAX(access_time) from asset_access_log1 group by id order by null;
+  update assets, xlog
+    set assets.access_time = xlog.access_time
+    where assets.id = xlog.id and assets.access_time < xlog.access_time;
+  drop temporary table xlog;
+  delete from asset_access_log1;
+  COMMIT;
+end $$
+
+DELIMITER ;
+
+:GO
+
+DROP FUNCTION IF EXISTS f_asset_ver;
+CREATE FUNCTION f_asset_ver() returns tinyint return 2;

@@ -27,6 +27,7 @@
 
 using System;
 using System.Data;
+using System.Data.Common;
 using System.Reflection;
 using System.Collections.Generic;
 using log4net;
@@ -37,6 +38,19 @@ using OpenSim.Data;
 
 namespace OpenSim.Data.MySQL
 {
+    /// <summary>How the code tracks the asset acces times. This is probably not needed
+    /// for the real use, but is convenient for performance testing. 
+    /// 
+    /// </summary>
+    public enum AccessTrackMode
+    {
+        None = 0,           // access times not tracked (fastest, but not what we want)
+        UpdateFromCode = 1, // use a separate UPDATE from the code (slow)
+        FastUpdate = 2,     // delayed update on MySql side (supposed to be the best?)
+        FastLog = 3         // same as above, use simpler logging method
+    };
+
+
     /// <summary>
     /// A MySQL Interface for the Asset Server
     /// </summary>
@@ -46,6 +60,16 @@ namespace OpenSim.Data.MySQL
 
         private string m_connectionString;
         private object m_dbLock = new object();
+
+        private AccessTrackMode m_track_mode = AccessTrackMode.None;
+        private int m_track_delay = 10;
+
+        public AccessTrackMode AccessTrackMode { get { return m_track_mode; } set { m_track_mode = value; } }
+
+        /// <summary>The minimum access tracking interval, in sec: if an asset was last accessed
+        /// less than AccessTrackDelay seconds ago, don't update the access time again.
+        /// </summary>
+        public int AccessTrackDelay { get { return m_track_delay; } set { m_track_delay = value; } }
 
         #region IPlugin Members
 
@@ -71,8 +95,42 @@ namespace OpenSim.Data.MySQL
 
             using (MySqlConnection dbcon = new MySqlConnection(m_connectionString))
             {
+                // NOTE: here we could use either Migration or MySqlMigration class, doesn't matter unless we have scripts!
                 dbcon.Open();
-                Migration m = new Migration(dbcon, assem, "AssetStore");
+                Migration m = new MySqlMigration(dbcon, assem, "AssetStore");
+                m.Update();
+
+                // We also have to take care about the stored procedure used for server-side access time tracking.
+                // The problem is that the DB can be copied from another DB (without actually running the migrations).
+                // That leaves any SPs behind, but does update the "AssetStore" record in [migrations].  So let's
+                // put any procs/funcs into a separate migration script "AssetStoreProcs".
+
+                using(DbCommand cmd = dbcon.CreateCommand() )
+                {
+                    cmd.CommandText = "update migrations set version = f_asset_ver() where name='AssetStoreProcs'";
+                    try
+                    {
+                        // We expect this to fail if the version function is not defined (which is normal)
+                        cmd.ExecuteNonQuery();
+                    }
+                    catch
+                    {
+                        // Without the version func, make sure the entire Procs migration will run. 
+                        cmd.CommandText = "delete from migrations where name='AssetStoreProcs'";
+                        try
+                        {
+                            cmd.ExecuteNonQuery();
+                        }
+                        catch(Exception e)
+                        {
+                            // there is no good reason for it to fail, but still proceed as if nothing has happened (?) 
+                            m_log.Error("[MySQL ASSETS]:", e); 
+                        }
+                    }
+                }
+
+                // *Must* use MySqlMigration here to define procs/funcs!
+                m = new MySqlMigration(dbcon, assem, "AssetStoreProcs");
                 m.Update();
             }
         }
@@ -82,7 +140,10 @@ namespace OpenSim.Data.MySQL
             throw new NotImplementedException();
         }
 
-        public override void Dispose() { }
+        public override void Dispose() 
+        {
+            Flush();
+        }
 
         /// <summary>
         /// The name of this DB provider
@@ -93,6 +154,38 @@ namespace OpenSim.Data.MySQL
         }
 
         #endregion
+
+        /// <summary>Do whatever is necessary to commit to the DB whatever might be cached, or do
+        /// some housekeeping in the DB or whatever.  It is called when the server is being stopped,
+        /// but could also be called occasionally (by timer or whatever) if it makes sense for a
+        /// specific store.
+        /// 
+        /// Here this is used to run the stored proc which updates the asset access times.
+        /// 
+        /// </summary>
+        public void Flush()
+        {
+            if (m_track_mode < AccessTrackMode.FastUpdate)
+                return;
+
+            using (DbConnection dbcon = new MySqlConnection(m_connectionString))
+            {
+                dbcon.Open();
+                using (DbCommand cmd = dbcon.CreateCommand())
+                {
+                    cmd.CommandText = (m_track_mode == AccessTrackMode.FastUpdate) ?
+                        "call asset_flush_log(1);" : "call asset_flush_log1();";
+                    try
+                    {
+                        cmd.ExecuteNonQuery();
+                    }
+                    catch (Exception e)
+                    {
+                        m_log.Error("Error updating asset access times", e);
+                    }
+                }
+            }
+        }
 
         #region IAssetDataPlugin Members
 
@@ -111,15 +204,31 @@ namespace OpenSim.Data.MySQL
                 {
                     dbcon.Open();
 
-                    using (MySqlCommand cmd = new MySqlCommand(
-                        "SELECT name, description, assetType, local, temporary, asset_flags, CreatorID, data FROM assets WHERE id=?id",
-                        dbcon))
+                    using (MySqlCommand cmd = dbcon.CreateCommand())
                     {
+                        string s = "";
+                        switch (m_track_mode)
+                        {
+                            case AccessTrackMode.UpdateFromCode:
+                                s = ", access_time, UNIX_TIMESTAMP() this_time";
+                                break;
+                            case AccessTrackMode.FastUpdate:
+                                s = String.Format(", asset_accessed(id, access_time, {0})", m_track_delay);
+                                break;
+                            case AccessTrackMode.FastLog:
+                                s = String.Format(", asset_accessed1(id, access_time, {0})", m_track_delay);
+                                break;
+                        }
+
+                        cmd.CommandText = String.Format("SELECT name, description, assetType, local, temporary, " +
+                            "asset_flags, CreatorID, data {0} FROM assets WHERE id=?id", s);
                         cmd.Parameters.AddWithValue("?id", assetID.ToString());
 
+                        int last_access = 0, this_access = 0;
+                        bool bNeedUpdate = false;
                         try
                         {
-                            using (MySqlDataReader dbReader = cmd.ExecuteReader(CommandBehavior.SingleRow))
+                            using (DbDataReader dbReader = cmd.ExecuteReader(CommandBehavior.SingleRow))
                             {
                                 if (dbReader.Read())
                                 {
@@ -135,7 +244,22 @@ namespace OpenSim.Data.MySQL
 
                                     asset.Temporary = Convert.ToBoolean(dbReader["temporary"]);
                                     asset.Flags = (AssetFlags)Convert.ToInt32(dbReader["asset_flags"]);
+
+                                    if (m_track_mode == AccessTrackMode.UpdateFromCode)
+                                    {
+                                        last_access = Convert.ToInt32(dbReader["access_time"]);
+                                        this_access = Convert.ToInt32(dbReader["this_time"]); 
+                                        // NOTE: weird to pull current timestamp from DB, but should be eventually removed anyway
+                                        bNeedUpdate = (this_access - last_access) > m_track_delay;
+                                    }
                                 }
+                            }
+
+                            if (bNeedUpdate)
+                            {
+                                cmd.CommandText = "UPDATE assets SET access_time = UNIX_TIMESTAMP() WHERE id=?id";
+                                // (Param ?id is already there)
+                                cmd.ExecuteNonQuery();
                             }
                         }
                         catch (Exception e)
