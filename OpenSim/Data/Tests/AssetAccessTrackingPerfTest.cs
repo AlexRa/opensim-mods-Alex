@@ -100,7 +100,7 @@ namespace OpenSim.Data.Tests
             RandomAccessTest(1000, 10000, 500, AccessTrackMode.FastLog, true);
         }
 
-        [Test]
+        [Test, Explicit("Very slow")]
         public void T060_AccessTracking_Update_3sec()
         {
             m_db.AccessTrackMode = AccessTrackMode.UpdateFromCode;
@@ -108,7 +108,7 @@ namespace OpenSim.Data.Tests
             RandomAccessTest(1000, 10000, 500, AccessTrackMode.UpdateFromCode, true);
         }
 
-        [Test]
+        [Test, Explicit("Very slow")]
         public void T070_AccessTracking_Update_50sec()
         {
             m_db.AccessTrackMode = AccessTrackMode.UpdateFromCode;
