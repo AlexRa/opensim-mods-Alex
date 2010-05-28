@@ -64,20 +64,40 @@ namespace OpenSim.Services.AssetService
                 string loaderArgs = assetConfig.GetString("AssetLoaderArgs",
                         String.Empty);
 
+                // Config logic: we keep "AssetLoaderEnabled" setting for backward compatibility.
+                // We analyze it here and skip the entire loading when it's disabled.
+                // A specific loader plugin implementation can take some extra params from the config,
+                // such as "AssetLoaderMode", owner ID or whatever. 
+        
                 bool assetLoaderEnabled = assetConfig.GetBoolean("AssetLoaderEnabled", true);
 
-                if (assetLoaderEnabled)
+                if (assetLoaderEnabled)  
                 {
                     m_log.InfoFormat("[ASSET]: Loading default asset set from {0}", loaderArgs);
-                    m_AssetLoader.ForEachDefaultXmlAsset(loaderArgs,
-                            delegate(AssetBase a)
+
+                    // If the loader supports the new IAssetLoaderEx interface, use that:
+                    if (m_AssetLoader is IAssetLoaderEx)
+                    {
+                        IAssetLoaderEx ldr = (IAssetLoaderEx)m_AssetLoader;
+                        AssetBase VersionAsset = Get(ldr.GetVersionAssetID());
+                        ldr.ForEachDefaultAsset(loaderArgs, assetConfig, VersionAsset, delegate(AssetBase a)
                             {
                                 Store(a);
                             });
+                    }
+                    else
+                    {
+                        // to be phased out eventually
+                        m_AssetLoader.ForEachDefaultXmlAsset(loaderArgs, delegate(AssetBase a)
+                            {
+                                Store(a);
+                            }
+                            );
+                    }
                 }
                 
-                m_log.Info("[ASSET SERVICE]: Local asset service enabled");
             }
+            m_log.Info("[ASSET SERVICE]: Local asset service enabled");
         }
 
         public AssetBase Get(string id)
