@@ -73,7 +73,7 @@ namespace OpenSim.Services.AssetService
 
                 if (assetLoaderEnabled)  
                 {
-                    m_log.InfoFormat("[ASSET]: Loading default asset set from {0}", loaderArgs);
+                    m_log.InfoFormat("[ASSETS]: Loading default asset set from {0}", loaderArgs);
 
                     // If the loader supports the new IAssetLoaderEx interface, use that:
                     if (m_AssetLoader is IAssetLoaderEx)
