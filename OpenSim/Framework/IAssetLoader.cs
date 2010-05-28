@@ -26,11 +26,48 @@
  */
 
 using System;
+using Nini.Config;
+
 
 namespace OpenSim.Framework
 {
+    /// <summary>This interface declares a single method that enumerates a default
+    /// asset set. It can be used for initializing the asset database with any
+    /// pre-defined assets.
+    /// </summary>
     public interface IAssetLoader
     {
         void ForEachDefaultXmlAsset(string assetSetFilename, Action<AssetBase> action);
+
     }
+
+    /// <summary>This extended version of the asset loader interface has two differences
+    /// from the original one: "Xml" is removed from the method name, so it does not
+    /// suggest any particular way of implementation and, more important, it declares
+    /// a "versioning" mechanism which allows to load the default assets only partually,
+    /// or skip the loading altogether when it is not really needed.
+    /// </summary>
+    public interface IAssetLoaderEx
+    {
+        /// <summary>Returns UUID of the asset where the loader keeps its versioning data.
+        /// The asset service is supposed to try fetching this asset and supply it (or null)
+        /// to the enum function.
+        /// </summary>
+        string GetVersionAssetID();
+          
+        /// <summary>Call the specified 'action' for each asset to be loaded. If the VersionAsset
+        /// is present, the loader may choose to skip all or part of the assets. The enumerator
+        /// will likely decide to modify the VersionAsset and submit it back to to action() at the end of
+        /// the enumeration. How the VersionAsset is used to keep the version info is up to a specific
+        /// loader implementation (e.g. timestamp of the XML file converted to string and stored in 
+        /// asset.Description). 
+        /// </summary>
+        /// <param name="LoaderParams">where to load the assets from, e.g. a filename</param>
+        /// <param name="cfg">a config with whatever parameters might be useful for the loader</param>
+        /// <param name="VersionAsset">optional asset with versioning information</param>
+        /// <param name="action">a delegate to be called with each asset (normally stores it to the database)</param>
+        void ForEachDefaultAsset(string LoaderParams, IConfig cfg, AssetBase VersionAsset, Action<AssetBase> action);
+    }
+
 }
+
