@@ -1248,6 +1248,21 @@
     ; Disable this to prevent the default asset set from being inserted into the
     ; asset store each time the region starts
     AssetLoaderEnabled = true
+    
+    ; The following applies to the AssetLoader.Filesystem plugin and chooses the version control
+    ; algorithm used by the loader. It normally doesn't make sense to re-load all predefined
+    ; assets into the database on each server startup, so the loader can now load only those
+    ; XML asset files that have changed since the last loading.  The loader implements two
+    ; ways to detect the changes: either by computing a hash code from each loaded XML file
+    ; (this is slightly slower, but more reliable), or just by looking at the timestamps of
+    ; these files.
+    
+    ; The values are case-insensitive, with several synonyms for some modes:
+    ;   none | skip | disable | off -  don't load (same as AssetLoaderEnabled = false)
+    ;   full | forced | all | complete - load all asset files.
+    ;   auto | hash | changed  -  keep a hash code for each loaded XML file, load again only when the hash changes
+    ;   time | timestamp  -  keep datetime of the last load, reload only newer files
+    AssetLoaderMode=auto
 
 [GridService]
     ;; default standalone, overridable in StandaloneCommon.ini
