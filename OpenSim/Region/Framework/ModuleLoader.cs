@@ -66,9 +66,10 @@ namespace OpenSim.Region.Framework
             DirectoryInfo dir = new DirectoryInfo(moduleDir);
             List<IRegionModule> modules = new List<IRegionModule>();
 
-            foreach (FileInfo fileInfo in dir.GetFiles("*.dll"))
+            foreach (FileInfo fileInfo in dir.GetFiles("OpenSim.Region.*.dll"))
             {
-                modules.AddRange(LoadRegionModules(fileInfo.FullName, scene));
+                if( !fileInfo.FullName.ToLower().Contains("tests"))
+                    modules.AddRange(LoadRegionModules(fileInfo.FullName, scene));
             }
             return modules;
         }
